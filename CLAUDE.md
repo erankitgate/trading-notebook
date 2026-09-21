@@ -77,7 +77,7 @@ All tables: RLS on, policy `(select auth.uid()) = user_id`, in the `supabase_rea
 ## Changing things
 
 1. Edit code → `npm run check` (syntax + unit tests) → `npm run test:e2e` (needs Chrome) → `npm run dev` to eyeball at http://127.0.0.1:8080/?demo=1
-2. DB change → new file `supabase/migrations/00N_name.sql` (idempotent), apply with the Supabase MCP `apply_migration`, then run both advisors and fix anything they flag. Always add RLS policies for new tables and add them to the realtime publication.
+2. DB change → new file `supabase/migrations/00N_name.sql` (idempotent), apply with the Supabase MCP `apply_migration` (or `supabase db push` after `supabase link --project-ref owpcomcmvwiutlulojts`; the CLI is installed via Homebrew), then run both advisors and fix anything they flag. Always add RLS policies for new tables and add them to the realtime publication.
 3. `/deploy` or `bash scripts/deploy.sh "message"` → commit, push, `gh run watch`. Verify with `curl -sI` on the live URL.
 
 ## Never
