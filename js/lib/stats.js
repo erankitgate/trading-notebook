@@ -73,12 +73,74 @@ export function ruleBreakCounts(diary, since) {
   return m;
 }
 
+/* ---------- rules compliance ---------- */
+/** { followed, total, pct } for a day. A day with no trades counts as fully compliant.
+    Uses the rules_check snapshot; falls back to rules_broken when only that exists. */
+export function ruleCompliance(e, rulesTotal = 0) {
+  const noTrades = dayTrades(e).length === 0;
+  const check = arr(e.rules_check).filter((r) => r && r.text);
+  if (check.length) {
+    const followed = noTrades ? check.length : check.filter((r) => r.followed).length;
+    return { followed, total: check.length, pct: followed / check.length };
+  }
+  const broken = arr(e.rules_broken).length, total = Math.max(rulesTotal, broken);
+  if (noTrades) return { followed: total, total, pct: 1 };
+  if (!total) return null;
+  return { followed: total - broken, total, pct: (total - broken) / total };
+}
+/** Ascending [{ date, pct, followed, total }] for diary days in the last `days` days. */
+export function complianceSeries(diary, days = 30, ref = today(), rulesTotal = 0) {
+  const from = addDays(ref, -(days - 1));
+  return sortAsc(diary).filter((e) => e.date >= from && e.date <= ref).map((e) => ({ date: e.date, ...(ruleCompliance(e, rulesTotal) || { pct: null, followed: 0, total: 0 }) })).filter((x) => x.pct != null);
+}
+/** Per-rule follow rate over the diary days given: [{ id, text, followed, days, pct }]. */
+export function perRuleCompliance(diary, rules) {
+  return rules.map((r) => {
+    let followed = 0, days = 0;
+    for (const e of diary) {
+      const noTrades = dayTrades(e).length === 0;
+      const snap = arr(e.rules_check).find((x) => x && (x.id === r.id || key(x.text) === key(r.text)));
+      const brokenLegacy = arr(e.rules_broken).some((x) => (typeof x === 'string' ? key(x) === key(r.text) : x.id === r.id || key(x.text) === key(r.text)));
+      if (!snap && !brokenLegacy && !noTrades) continue; // no information for this rule that day
+      days++; if (noTrades || (snap ? snap.followed : !brokenLegacy)) followed++;
+    }
+    return { id: r.id, text: r.text, followed, days, pct: days ? followed / days : null };
+  });
+}
+
 /* ---------- ranges ---------- */
-export const RANGES = [['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['ytd', 'This year'], ['all', 'All time']];
+export const RANGES = [['today', 'Today'], ['1w', '1 week'], ['1m', '1 month'], ['3m', '3 months'], ['1y', '1 year'], ['all', 'All']];
+const RANGE_DAYS = { today: 1, '1w': 7, '1m': 30, '30d': 30, '3m': 90, '90d': 90, '6m': 180, '1y': 365 };
 export function filterRange(diary, range, ref = today()) {
   if (!range || range === 'all') return diary;
-  const from = range === 'ytd' ? `${ref.slice(0, 4)}-01-01` : range === 'month' ? `${ref.slice(0, 7)}-01` : addDays(ref, -(parseInt(range, 10) - 1));
+  const from = range === 'ytd' ? `${ref.slice(0, 4)}-01-01` : range === 'month' ? `${ref.slice(0, 7)}-01` : addDays(ref, -((RANGE_DAYS[range] || parseInt(range, 10) || 30) - 1));
   return diary.filter((e) => e.date >= from && e.date <= ref);
+}
+
+/* ---------- account balance ---------- */
+/** Ascending equity points. Reported balances (capital_log) win; otherwise start capital + cumulative net since start_date. */
+export function balanceSeries(diary, capitalLog, settings = {}) {
+  const start = num(settings.capital), startDate = settings.start_date || null;
+  const logged = new Map(arr(capitalLog).map((c) => [c.date, Number(c.amount)]));
+  const days = sortAsc(diary).filter((e) => !startDate || e.date >= startDate);
+  const dates = [...new Set([...(startDate ? [startDate] : []), ...days.map((e) => e.date), ...logged.keys()])].sort();
+  if (!dates.length) return [];
+  let cum = 0, lastLogged = null; const netBy = Object.fromEntries(days.map((e) => [e.date, dayNet(e)]));
+  return dates.map((date) => {
+    cum = round2(cum + (netBy[date] || 0));
+    if (logged.has(date)) { lastLogged = { date, amount: logged.get(date), cumAt: cum }; }
+    const derived = start != null ? round2(start + cum) : null;
+    // after a reported balance, carry it forward plus any later diary P&L
+    const est = lastLogged ? round2(lastLogged.amount + (cum - lastLogged.cumAt)) : derived;
+    return { date, balance: logged.has(date) ? logged.get(date) : est, reported: logged.has(date), net: netBy[date] || 0, cum };
+  }).filter((p) => p.balance != null);
+}
+export function accountSummary(diary, capitalLog, settings = {}) {
+  const series = balanceSeries(diary, capitalLog, settings), start = num(settings.capital);
+  const last = series[series.length - 1];
+  const balance = last ? last.balance : start;
+  const net = start != null && balance != null ? round2(balance - start) : null;
+  return { start, startDate: settings.start_date || null, balance, net, returnPct: start && net != null ? net / start : null, series, lastReported: [...arr(capitalLog)].sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null };
 }
 
 /* ---------- headline summary ---------- */

@@ -6,6 +6,7 @@ import { esc } from './dom.js';
 import { money, shortDate, niceDate, cls } from './fmt.js';
 
 const W = 640;
+export const PCT_DOMAIN = { min: 0, max: 100, ticks: [0, 25, 50, 75, 100] };
 const compact = (n) => {
   const a = Math.abs(n), s = n < 0 ? '-' : '';
   if (a >= 1e5) return `${s}${(a / 1e5).toFixed(a >= 1e6 ? 0 : 1)}L`;
@@ -33,23 +34,24 @@ function xLabels(points, xOf, height, pad) {
 }
 
 /** Equity curve: points = [{ date, cum }] ascending. */
-export function lineChart(points, { height = 220, valueKey = 'cum', label = 'Equity' } = {}) {
+export function lineChart(points, { height = 220, valueKey = 'cum', label = 'Equity', zero = true, fmtValue = money } = {}) {
   if (!points.length) return '<p class="sub small">No data yet.</p>';
   const pad = { l: 46, r: 14, t: 12, b: 26 };
   const ys = points.map((p) => p[valueKey]);
-  const { ticks, lo, hi } = niceTicks(Math.min(0, ...ys), Math.max(0, ...ys));
+  const { ticks, lo, hi } = zero ? niceTicks(Math.min(0, ...ys), Math.max(0, ...ys)) : niceTicks(Math.min(...ys), Math.max(...ys));
+  const base = zero ? 0 : lo;
   const xOf = (i) => pad.l + (points.length === 1 ? (W - pad.l - pad.r) / 2 : (i * (W - pad.l - pad.r)) / (points.length - 1));
   const yOf = (v) => pad.t + ((hi - v) / (hi - lo)) * (height - pad.t - pad.b);
   const d = points.map((p, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(1)} ${yOf(p[valueKey]).toFixed(1)}`).join(' ');
-  const area = `${d} L${xOf(points.length - 1).toFixed(1)} ${yOf(0).toFixed(1)} L${xOf(0).toFixed(1)} ${yOf(0).toFixed(1)} Z`;
+  const area = `${d} L${xOf(points.length - 1).toFixed(1)} ${yOf(base).toFixed(1)} L${xOf(0).toFixed(1)} ${yOf(base).toFixed(1)} Z`;
   const last = points[points.length - 1];
-  const data = points.map((p, i) => ({ x: +xOf(i).toFixed(1), y: +yOf(p[valueKey]).toFixed(1), tip: `${niceDate(p.date)}: ${money(p[valueKey])}` }));
+  const data = points.map((p, i) => ({ x: +xOf(i).toFixed(1), y: +yOf(p[valueKey]).toFixed(1), tip: p.tip || `${niceDate(p.date)}: ${fmtValue(p[valueKey])}` }));
   return `<div class="chart" data-chart="line" data-points='${esc(JSON.stringify(data))}'><svg viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}">
     ${frame(height, pad, ticks, yOf)}
-    <line class="grid-line" x1="${pad.l}" x2="${W - pad.r}" y1="${yOf(0)}" y2="${yOf(0)}" stroke-width="1.5"/>
+    ${zero ? `<line class="grid-line" x1="${pad.l}" x2="${W - pad.r}" y1="${yOf(0)}" y2="${yOf(0)}" stroke-width="1.5"/>` : ''}
     <path class="area" d="${area}"/><path class="line" d="${d}"/>
     <circle class="dot" r="4" cx="${xOf(points.length - 1)}" cy="${yOf(last[valueKey])}"/>
-    <text class="axis-text" x="${Math.min(xOf(points.length - 1), W - pad.r - 40)}" y="${yOf(last[valueKey]) - 8}" text-anchor="end" font-weight="700">${esc(money(last[valueKey], { compact: true }))}</text>
+    <text class="axis-text" x="${Math.min(xOf(points.length - 1), W - pad.r - 40)}" y="${yOf(last[valueKey]) - 8}" text-anchor="end" font-weight="700">${esc(fmtValue(last[valueKey], { compact: true }))}</text>
     ${xLabels(points, xOf, height, pad)}
     <line class="cross" x1="0" x2="0" y1="${pad.t}" y2="${height - pad.b}" data-cross hidden/>
     <rect class="hit" x="${pad.l}" y="${pad.t}" width="${W - pad.l - pad.r}" height="${height - pad.t - pad.b}" data-hit/>
@@ -57,11 +59,11 @@ export function lineChart(points, { height = 220, valueKey = 'cum', label = 'Equ
 }
 
 /** Signed bars: items = [{ date|label, value, href? }]. Green up, red down, rounded data-end. */
-export function barChart(items, { height = 200, label = 'Daily P&L', labelKey = 'date', fmtLabel = (it) => (it.date ? niceDate(it.date) : it.label) } = {}) {
+export function barChart(items, { height = 200, label = 'Daily P&L', labelKey = 'date', fmtLabel = (it) => (it.date ? niceDate(it.date) : it.label), domain = null, fmtValue = money } = {}) {
   if (!items.length) return '<p class="sub small">No data yet.</p>';
   const pad = { l: 46, r: 14, t: 12, b: 26 };
   const vals = items.map((i) => i.value);
-  const { ticks, lo, hi } = niceTicks(Math.min(0, ...vals), Math.max(0, ...vals));
+  const { ticks, lo, hi } = domain ? { ticks: domain.ticks, lo: domain.min, hi: domain.max } : niceTicks(Math.min(0, ...vals), Math.max(0, ...vals));
   const inner = W - pad.l - pad.r, slot = inner / items.length, bw = Math.min(24, Math.max(2, slot - 2));
   const yOf = (v) => pad.t + ((hi - v) / (hi - lo)) * (height - pad.t - pad.b);
   const y0 = yOf(0);
@@ -72,9 +74,9 @@ export function barChart(items, { height = 200, label = 'Daily P&L', labelKey = 
     const path = up
       ? `M${x} ${y0} V${y1 + r} Q${x} ${y1} ${x + r} ${y1} H${x + bw - r} Q${x + bw} ${y1} ${x + bw} ${y1 + r} V${y0} Z`
       : `M${x} ${y0} V${y1 - r} Q${x} ${y1} ${x + r} ${y1} H${x + bw - r} Q${x + bw} ${y1} ${x + bw} ${y1 - r} V${y0} Z`;
-    const tip = `${fmtLabel(it)}: ${money(it.value)}`;
+    const tip = it.tip || `${fmtLabel(it)}: ${fmtValue(it.value)}`;
     const open = it.href ? `<a href="${esc(it.href)}">` : '', close = it.href ? '</a>' : '';
-    return `${open}<path class="bar ${cls(it.value)}" d="${path}"/><rect class="hit" x="${pad.l + slot * i}" y="${pad.t}" width="${slot}" height="${height - pad.t - pad.b}" data-tip-text="${esc(tip)}" data-tip-x="${x + bw / 2}" data-tip-y="${Math.min(y0, y1)}"/>${close}`;
+    return `${open}<path class="bar ${it.cls || cls(it.value)}" d="${path}"/><rect class="hit" x="${pad.l + slot * i}" y="${pad.t}" width="${slot}" height="${height - pad.t - pad.b}" data-tip-text="${esc(tip)}" data-tip-x="${x + bw / 2}" data-tip-y="${Math.min(y0, y1)}"/>${close}`;
   }).join('');
   const xl = labelKey === 'date' ? xLabels(items, (i) => pad.l + slot * i + slot / 2, height, pad)
     : items.map((it, i) => `<text class="axis-text" x="${pad.l + slot * i + slot / 2}" y="${height - pad.b + 16}" text-anchor="middle">${esc(it.label)}</text>`).join('');

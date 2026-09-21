@@ -67,9 +67,11 @@ export function render(ctx, date, isNew) {
   const template = arr(cfg.checklist).filter(Boolean);
   const saved = arr(e.checklist).filter((c) => c && c.item);
   const checklist = isNew || !saved.length ? template.map((item) => ({ item, done: false })) : saved;
-  // rules: active ones plus any inactive rule this page already recorded
+  // rules tick-list: active rules plus any rule this page already recorded; checked = followed
+  const snap = arr(e.rules_check).filter((r) => r && r.text);
   const brokenIds = new Set(arr(e.rules_broken).map((r) => (typeof r === 'string' ? r : r.id)));
-  const rules = [...S.rules.filter((r) => r.active || brokenIds.has(r.id)), ...arr(e.rules_broken).filter((r) => r && r.id && !S.rules.some((x) => x.id === r.id))];
+  const rules = [...S.rules.filter((r) => r.active || brokenIds.has(r.id) || snap.some((x) => x.id === r.id)), ...snap.filter((r) => r.id && !S.rules.some((x) => x.id === r.id))];
+  const followed = (r) => { const x = snap.find((y) => y.id === r.id); return x ? !!x.followed : isNew ? false : !brokenIds.has(r.id); };
 
   let h = `<h1>${isNew ? 'New diary page' : `Edit ${niceDate(e.date)}`}</h1><form id="df" novalidate>
     <datalist id="mtags">${mtags.map((t) => `<option value="${attr(t)}">`).join('')}</datalist>
@@ -90,8 +92,8 @@ export function render(ctx, date, isNew) {
   h += `<fieldset><legend>Trades</legend><div id="trades">${arr(e.trades).map(tradeRow).join('')}</div><button type="button" class="btn ghost small" id="addTrade">+ Add trade</button>
     <div class="grid mt"><div><label>Charges for the day ₹ (brokerage + taxes)</label><input name="charges" type="number" step="any" inputmode="decimal" value="${attr(e.charges || '')}" placeholder="0"></div></div></fieldset>`;
 
-  if (rules.length) h += `<fieldset><legend>Rules broken today</legend><ul class="checks">${rules.map((r) => `<li><label><input type="checkbox" name="rule" value="${attr(r.id)}" data-text="${attr(r.text)}"${brokenIds.has(r.id) ? ' checked' : ''}> ${esc(r.text)}</label></li>`).join('')}</ul><div class="hint">Tick honestly — the front page counts these.</div></fieldset>`;
-  else h += `<fieldset><legend>Rules broken today</legend><div class="hint">Add your hard rules in the <a href="#/playbook">Playbook</a> and they'll appear here as checkboxes.</div></fieldset>`;
+  if (rules.length) h += `<fieldset><legend>Rules followed today <span class="muted small" id="ruleScore"></span></legend><ul class="checks">${rules.map((r, i) => `<li><label><input type="checkbox" name="rule" value="${attr(r.id)}" data-text="${attr(r.text)}"${followed(r) ? ' checked' : ''}> <span class="muted">${i + 1}.</span> ${esc(r.text)}</label></li>`).join('')}</ul><div class="hint">Tick every rule you kept. Unticked = broken; it goes to the front page. A day with no trades counts as 100% automatically. <a href="#" id="tickAll">Tick all</a></div></fieldset>`;
+  else h += `<fieldset><legend>Rules followed today</legend><div class="hint">Add your rules in the <a href="#/playbook">Playbook</a> and they'll appear here as a tick-list.</div></fieldset>`;
 
   h += `<fieldset><legend>Mistakes</legend><div id="mistakes">${arr(e.mistakes).map(mistakeRow).join('')}</div><button type="button" class="btn ghost small" id="addMistake">+ Add mistake</button></fieldset>`;
 
@@ -120,6 +122,11 @@ export function render(ctx, date, isNew) {
   window.addEventListener('beforeunload', guard);
   ctx.onLeave(() => window.removeEventListener('beforeunload', guard));
   form.addEventListener('keydown', (ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') { ev.preventDefault(); form.requestSubmit(); } });
+  const score = form.querySelector('#ruleScore');
+  const updScore = () => { if (!score) return; const all = form.querySelectorAll('[name=rule]'), on = form.querySelectorAll('[name=rule]:checked'); score.textContent = all.length ? `${on.length}/${all.length} · ${Math.round((on.length / all.length) * 100)}%` : ''; };
+  updScore(); form.addEventListener('change', (ev) => { if (ev.target.name === 'rule') updScore(); });
+  const tickAll = form.querySelector('#tickAll');
+  if (tickAll) tickAll.onclick = (ev) => { ev.preventDefault(); for (const c of form.querySelectorAll('[name=rule]')) c.checked = true; updScore(); dirty = true; };
 
   const del = form.querySelector('#del');
   if (del) del.onclick = async () => {
@@ -142,12 +149,14 @@ export function render(ctx, date, isNew) {
     const mistakes = [...mBox.querySelectorAll('.mistake')].map((row) => readRow(row, ['tag', 'detail'])).filter((m) => m.tag);
     const watchlist = [...wBox.querySelectorAll('.watch-row')].map((row) => readRow(row, ['instrument', 'bias', 'levels', 'note'])).filter((w) => w.instrument);
     const checklist = [...form.querySelectorAll('[name^=check_]')].map((c) => ({ item: c.dataset.item, done: c.checked }));
-    const rules_broken = [...form.querySelectorAll('[name=rule]:checked')].map((c) => ({ id: c.value, text: c.dataset.text }));
+    const noTrades = trades.length === 0;
+    const rules_check = [...form.querySelectorAll('[name=rule]')].map((c) => ({ id: c.value, text: c.dataset.text, followed: noTrades || c.checked }));
+    const rules_broken = rules_check.filter((r) => !r.followed).map(({ id, text }) => ({ id, text }));
     const row = {
       date: form.date.value, title: form.title.value.trim() || null, market: form.market.value.trim() || null, mood: form.mood.value.trim() || null,
       plan_followed: form.plan_followed.value || null, plan_note: form.plan_note.value.trim() || null,
       trades, mistakes, went_well: lines(form.went_well.value), lessons: lines(form.lessons.value), next_day_strategy: lines(form.next_day_strategy.value),
-      notes: form.notes.value.trim() || null, charges: num(form.charges.value) || 0, checklist, rules_broken, watchlist,
+      notes: form.notes.value.trim() || null, charges: num(form.charges.value) || 0, checklist, rules_check, rules_broken, watchlist,
     };
     busy(form.querySelector('[type=submit]'), 'Saving…', async () => {
       try {

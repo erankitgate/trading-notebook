@@ -12,5 +12,6 @@ Give me my pre-market briefing. Use the Supabase MCP `execute_sql` tool on proje
    - **Yesterday's plan** and **watchlist** (instrument, bias, levels, note).
    - **Read this before you trade**: pinned reminders; mistakes repeated ≥2 times in 30 days (with counts); rules broken ≥2 times.
    - **Form**: last 5 days net P&L, current streak, and — if 3+ red days — a one-line reminder to halve size.
-   - **Hard rules** (active), numbered.
+   - **Market brief** for today from `market_briefs` (latest row): Nifty close, RSI, pivot/S1/R1, the plan bullets. If there is none for today, say "run /brief".
+   - **Hard rules** (active), numbered, with each rule's follow-rate over the last 30 days from `diary_entries.rules_check`.
 4. End with one line: the single most important thing to do today, based on the above. No motivational filler.

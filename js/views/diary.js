@@ -2,7 +2,7 @@
 
 import { esc, li } from '../lib/dom.js';
 import { money, cls, rmult, niceDate, monthKey, monthLabel, arr, key, plural, num } from '../lib/fmt.js';
-import { dayNet, dayGross, dayCharges, dayTrades, mistakeCounts, hasRepeatedMistake, tradePnl, tradeR, tradeRisk, tradeRR, dayLimits } from '../lib/stats.js';
+import { dayNet, dayGross, dayCharges, dayTrades, mistakeCounts, hasRepeatedMistake, tradePnl, tradeR, tradeRisk, tradeRR, dayLimits, ruleCompliance } from '../lib/stats.js';
 import { S, settings } from '../state.js';
 import { diaryRow, empty, alertsHtml, watchRow } from './shared.js';
 
@@ -101,9 +101,12 @@ export function entry(ctx, date) {
   } else h += '<p class="sub">No trades taken.</p>';
   h += '</div>';
 
-  /* rules broken + mistakes */
-  const rb = arr(e.rules_broken);
-  if (rb.length) h += `<div class="block"><h2>Rules broken</h2><ul class="rules-broken">${rb.map((r) => `<li>${esc(typeof r === 'string' ? r : r.text)}</li>`).join('')}</ul></div>`;
+  /* rules + mistakes */
+  const rc = ruleCompliance(e, S.rules.length), snap = arr(e.rules_check).filter((r) => r && r.text), rb = arr(e.rules_broken);
+  if (snap.length) {
+    const noTrades = !tr.length;
+    h += `<div class="block"><div class="section-head"><h2>Rules</h2><span class="big ${rc.pct >= 0.8 ? 'pos' : rc.pct >= 0.5 ? 'warn' : 'neg'}">${rc.followed}/${rc.total} · ${Math.round(rc.pct * 100)}%</span></div>${noTrades ? '<p class="small muted">No trades taken — counts as fully compliant.</p>' : ''}<ul class="check">${snap.map((r) => `<li class="${noTrades || r.followed ? 'done' : 'broke'}">${esc(r.text)}</li>`).join('')}</ul></div>`;
+  } else if (rb.length) h += `<div class="block"><h2>Rules broken</h2><ul class="rules-broken">${rb.map((r) => `<li>${esc(typeof r === 'string' ? r : r.text)}</li>`).join('')}</ul></div>`;
   const ms = arr(e.mistakes);
   h += '<div class="block"><h2>Mistakes</h2>';
   if (ms.length) h += `<ul class="mist">${ms.map((x) => { const c = mc[key(x.tag)], rep = c && c.count >= 2; return `<li class="${rep ? 'rep' : ''}"><span class="mt">${esc(x.tag)}${rep ? ` — repeated ×${c.count}` : ''}</span>${x.detail ? `<span class="md">${esc(x.detail)}</span>` : ''}</li>`; }).join('')}</ul>`;

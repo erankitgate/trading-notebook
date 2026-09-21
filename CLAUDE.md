@@ -17,7 +17,13 @@ The owner opens Claude Code in this folder every day. The project slash commands
 | `/log-day` | Turns the owner's plain-English description of the day into a `diary_entries` row (trades, P&L, mistakes, lessons, plan) |
 | `/learn <topic>` | Writes a full guide as an Artifact, then saves a `learning_notes` row linking to it |
 | `/review-week` | Pulls the week's numbers from the DB, drafts the weekly review, saves it to `reviews` |
+| `/brief` | Runs `scripts/market_brief.py` (Yahoo daily candles → Nifty levels, RSI, ATR, globals, all 50 stocks), writes the narrative + plan, saves to `market_briefs` |
+| `/balance <₹>` | Records the day's account balance in `capital_log` (hero card + balance chart) |
 | `/deploy` | Runs checks + tests, commits, pushes, watches the Pages deploy until green |
+
+Owner facts: starting capital ₹2,27,000 on 2026-09-21 (`settings.capital`, `settings.start_date`); 9 hard rules in `rules`
+(Nifty only, single trade/day, written entry/SL/target, no big-event days, no expiry within 2 days, no blind futures, news-based only,
+trend trades buy-dip/sell-top, no FOMO). Rule compliance = per-day tick-list in `diary_entries.rules_check`; a no-trade day is 100%.
 
 Writing to the database from here goes through the Supabase MCP `execute_sql` tool. It runs as the
 service role, so **always set `user_id` explicitly** — look it up first:
@@ -42,7 +48,9 @@ js/lib/stats.js       all trading maths: P&L, R, win rate, PF, expectancy, drawd
 js/lib/charts.js      inline-SVG equity line, signed bars, calendar heatmap, sparkline + tooltips
 js/lib/dom.js         esc(), toast(), download(), busy()
 js/views/*.js         one file per screen: home, diary (list+day), diaryForm, analytics, playbook, learn, reviews, settings, login
-supabase/migrations/  001_init, 002_pro_trader, 003_hardening — applied to the live project; add 004_… for changes
+js/views/market.js    market brief view + briefTeaser() for the front page
+scripts/market_brief.py  Yahoo Finance fetch + indicators → .brief.json (git-ignored); the raw data behind /brief
+supabase/migrations/  001_init … 004_dashboard — applied to the live project; add 005_… for changes
 tests/unit/           node:test for stats/fmt/charts ticks — `npm test`
 tests/e2e/run.js      headless Chrome (puppeteer-core) walk of every route in demo mode — `npm run test:e2e`
 .github/workflows/    deploy.yml copies the site into _site and publishes to Pages
@@ -72,6 +80,10 @@ tests/e2e/run.js      headless Chrome (puppeteer-core) walk of every route in de
 - `rules` — hard rules: `text, active, sort`.
 - `settings` — one row per user (pk `user_id`): `capital, risk_per_trade_pct, daily_max_loss, max_trades_per_day, checklist [string]`.
 - `reviews` — weekly: `week_start (Monday, unique per user), grade A–F, what_worked [], what_didnt [], focus [], notes`.
+- `capital_log` — `date (unique per user), amount, note` — reported account balances; `stats.balanceSeries` fills gaps with diary P&L.
+- `market_briefs` — `date (session, unique per user), as_of, summary, plan [], nifty {…, pivots}, indices [], globals [], stocks [], breadth {}` — built by `/brief`.
+- `diary_entries.rules_check` — `[{id, text, followed}]` snapshot of every rule for the day (`rules_broken` is the derived subset).
+- `settings.start_date` — equity tracking starts here; `capital` is the balance on that date.
 All tables: RLS on, policy `(select auth.uid()) = user_id`, in the `supabase_realtime` publication.
 
 ## Changing things

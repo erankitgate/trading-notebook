@@ -2,9 +2,9 @@
 
 import { esc } from '../lib/dom.js';
 import { money, cls, pct, rmult, niceDate, today, monthKey, monthLabel, DOW, plural, addDays } from '../lib/fmt.js';
-import { summary, filterRange, equityCurve, bySetup, byUnderlying, byWeekday, byMonth, byWeek, mistakeTable, ruleBreakCounts, dayNet, RANGES } from '../lib/stats.js';
-import { lineChart, barChart, calendar, bindCharts } from '../lib/charts.js';
-import { S, settings } from '../state.js';
+import { summary, filterRange, equityCurve, bySetup, byUnderlying, byWeekday, byMonth, byWeek, mistakeTable, ruleBreakCounts, dayNet, RANGES, accountSummary, complianceSeries, perRuleCompliance } from '../lib/stats.js';
+import { lineChart, barChart, calendar, bindCharts, PCT_DOMAIN } from '../lib/charts.js';
+import { S, settings, activeRules } from '../state.js';
 import { empty } from './shared.js';
 
 const fmtPF = (pf) => (pf == null ? '–' : pf === Infinity ? '∞' : pf.toFixed(2));
@@ -12,7 +12,7 @@ const kpi = (label, value, detail = '', c = '') => `<div class="kpi"><small>${la
 
 export function render(ctx) {
   ctx.setNav('analytics');
-  const range = ctx.query.get('r') || '90d';
+  const range = ctx.query.get('r') || '3m';
   const cal = ctx.query.get('m') || monthKey(S.diary[0]?.date || today());
   const cfg = settings();
   const diary = filterRange(S.diary, range), s = summary(diary, cfg);
@@ -46,6 +46,19 @@ export function render(ctx) {
     ${kpi('Days with a repeated mistake', s.daysWithRepeat, '', s.daysWithRepeat ? 'neg' : 'pos')}
     ${kpi('Plan followed', answered ? `${p.yes} yes · ${p.partly} partly · ${p.no} no` : '–', answered ? `avg day: followed ${money(p.yes ? p.netYes / p.yes : 0)} vs not ${money(p.no ? p.netNo / p.no : 0)}` : 'answer “Did I follow the plan?” daily')}
   </div></div>`;
+
+  /* account balance */
+  const acct = accountSummary(S.diary, S.capital, cfg);
+  if (acct.series.length > 1) h += `<div class="chart-title"><h3>Account balance <span class="${cls(acct.net || 0)}">${acct.net != null ? `${money(acct.net)} · ${pct(acct.returnPct, 2)}` : ''}</span></h3><span class="legend">since ${acct.startDate ? niceDate(acct.startDate, { day: 'numeric', month: 'short' }) : 'start'}</span></div>${lineChart(acct.series.map((p) => ({ date: p.date, balance: p.balance, tip: `${niceDate(p.date)}: ${money(p.balance, { sign: false })}${p.reported ? ' (reported)' : ''}` })), { valueKey: 'balance', label: 'Account balance', zero: false, fmtValue: (v, o) => money(v, { sign: false, ...(o || {}) }) })}`;
+
+  /* rules compliance */
+  const rules = activeRules(), comp = complianceSeries(diary, 3650, today(), rules.length).slice(-60);
+  if (comp.length) {
+    const avg = comp.reduce((a, c) => a + c.pct, 0) / comp.length;
+    h += `<div class="chart-title"><h3>Rules followed per day <span class="${avg >= 0.8 ? 'pos' : avg >= 0.5 ? 'warn' : 'neg'}">${pct(avg)}</span></h3><span class="legend">${comp.length} days</span></div>${barChart(comp.map((c) => ({ date: c.date, value: Math.round(c.pct * 100), cls: c.pct >= 0.8 ? 'ok' : c.pct >= 0.5 ? 'mid' : 'low', href: `#/diary/${c.date}`, tip: `${niceDate(c.date)}: ${c.followed}/${c.total} · ${Math.round(c.pct * 100)}%` })), { height: 160, label: 'Rules followed', domain: PCT_DOMAIN })}`;
+    const per = perRuleCompliance(diary, rules).filter((r) => r.days);
+    if (per.length) h += `<div class="table-wrap"><table><thead><tr><th>Rule</th><th class="r">Followed</th><th class="r">Days</th><th class="r">%</th></tr></thead><tbody>${per.map((r) => `<tr><td>${esc(r.text)}</td><td class="r">${r.followed}</td><td class="r">${r.days}</td><td class="r"><b class="${r.pct >= 0.8 ? 'pos' : r.pct >= 0.5 ? 'warn' : 'neg'}">${pct(r.pct)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  }
 
   /* equity + daily bars */
   const curve = equityCurve(diary);

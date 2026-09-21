@@ -13,7 +13,9 @@ Rules:
     If I give entry, exit and qty but not P&L, compute `pnl = (exit − entry) × qty` (reverse for Sell), rounded to 2 dp. `risk = |entry − stop| × qty` when a stop is given.
     Match `setup` to an existing `setups.name` (case-insensitive) when what I describe fits one; otherwise leave it null and tell me.
   - `mistakes`: `[{tag, detail}]` — reuse an existing tag from past `diary_entries` when it's the same mistake (this is what powers the "repeated ×N" counter). List me the tags you reused.
-  - `rules_broken`: `[{id, text}]` from active `rules` when what I describe clearly breaks one. Don't guess.
+  - `rules_check`: `[{id, text, followed}]` for EVERY active rule in `rules` (ordered by sort). Mark `followed:false` only when what I
+    describe clearly breaks the rule; ask me about any rule you can't judge rather than guessing. A day with no trades → all `followed:true`.
+    `rules_broken` = the `{id, text}` subset with `followed:false`.
   - `charges` (number), `plan_followed` (`yes|partly|no`) + `plan_note`, `market`, `mood`, `title` (one line, ≤ 60 chars, written by you if I didn't give one).
   - `went_well`, `lessons`, `next_day_strategy`: arrays of short strings. `watchlist`: `[{instrument, bias: bullish|bearish|neutral, levels, note}]`.
 - Before writing, show me the row as a compact summary (trades table with P&L, day net, mistakes, rules broken, plan) and the SQL. Ask "Save it?" once. Then run it.

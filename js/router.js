@@ -7,4 +7,4 @@ export function parseHash(hash = location.hash) {
 /** Navigate; re-dispatch when already there (hashchange wouldn't fire). */
 export function go(hash, dispatch) { if (location.hash === hash) dispatch(); else location.hash = hash; }
 /** True while the user is inside a form (don't re-render under their fingers). */
-export const inForm = () => /\/(new|edit)(\?|$)/.test(location.hash) || /^#\/(settings|review)/.test(location.hash);
+export const inForm = () => /\/(new|edit)(\?|$)/.test(location.hash) || /^#\/(settings|reviews\/)/.test(location.hash);

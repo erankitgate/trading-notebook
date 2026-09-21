@@ -41,7 +41,22 @@ try {
   check(/repeated mistake/.test(t), 'home: repeated mistake auto-detected');
   check(/Plan for next session/.test(t), 'home: plan for next session');
   check(/Loss budget used/.test(t) || /No page yet/.test(t), 'home: today strip');
-  check((await page.$$('.stat')).length >= 6, 'home: six stat tiles');
+  check((await page.$$('.stat')).length >= 6, 'home: stat tiles');
+  check(/Account balance/i.test(t) && /since/.test(t), 'home: account hero');
+  check(/Rules followed — last 30 days/.test(t) && (await page.$$('.rulelist li')).length === 4, 'home: rules compliance list');
+  check((await page.$$('[data-chart="bars"] path.bar.ok, [data-chart="bars"] path.bar.mid, [data-chart="bars"] path.bar.low')).length > 5, 'home: compliance bars');
+  check(/Market brief/.test(t) && /Pivot/.test(t), 'home: market teaser');
+  await page.click('.chip.accent[href="#/?r=1w"]');
+  await page.waitForFunction(() => document.querySelector('.chip.accent[href="#/?r=1w"]')?.getAttribute('aria-pressed') === 'true');
+  check(/Net P&L · 1 week/.test(await text()), 'home: range chips switch the stats');
+
+  t = await visit('#/market');
+  check(/Nifty 50/.test(t) && /you are here/.test(t) && /Global cues/.test(t) && /All Nifty 50 stocks/.test(t), 'market: brief renders');
+  check((await page.$$('.stocks-table tbody tr')).length === 20, 'market: stocks table');
+  await page.click('th.sort[data-k="rsi"]');
+  await page.waitForFunction(() => location.hash.includes('s=rsi'));
+  await page.waitForFunction(() => document.querySelector('th.sort[data-k="rsi"]')?.getAttribute('aria-sort') === 'descending');
+  check(await page.$eval('.stocks-table tbody tr:first-child .rsi', (el) => el.textContent === '78'), 'market: sort by RSI');
 
   t = await visit('#/diary');
   check(/Daily trade diary/.test(t) && (await page.$$('.list li')).length > 10, 'diary: list renders with month groups');
@@ -50,12 +65,12 @@ try {
 
   t = await visit('#/analytics');
   check((await page.$$('.kpi')).length >= 12, 'analytics: KPI tiles');
-  check((await page.$$('[data-chart="line"] path.line')).length === 1, 'analytics: equity curve drawn');
+  check((await page.$$('[data-chart="line"] path.line')).length === 2, 'analytics: balance + equity curves drawn');
   check((await page.$$('[data-chart="bars"] path.bar')).length > 10, 'analytics: daily bars drawn');
   check((await page.$$('.cal .cell')).length >= 28, 'analytics: calendar heatmap');
   check(/By setup/.test(t) && /Mistakes, ranked/.test(t), 'analytics: breakdown tables');
   await page.hover('[data-chart="bars"] rect.hit');
-  check(await page.$eval('[data-chart="bars"] .tip', (el) => !el.hidden && el.textContent.includes('₹')), 'analytics: bar tooltip on hover');
+  check(await page.$eval('[data-chart="bars"] .tip', (el) => !el.hidden && /%/.test(el.textContent)), 'analytics: bar tooltip on hover');
   await page.click('.chip[href*="r=all"]');
   await page.waitForFunction(() => document.querySelector('.chip[href*="r=all"]')?.getAttribute('aria-pressed') === 'true', { timeout: 5000 });
   check(true, 'analytics: range chip switches');
@@ -85,7 +100,7 @@ try {
   const calc = await page.$eval('.trade [data-calc]', (el) => el.textContent);
   check(/\+₹100/.test(calc) && /Risk ₹50/.test(calc) && /\+2\.00R/.test(calc), `form: live calc (${calc.replace(/\s+/g, ' ').trim()})`);
   await page.click('#addMistake'); await page.type('.mistake [name=tag]', 'Exited too early');
-  await page.click('[name=rule]');
+  await page.click('#tickAll'); await page.click('[name=rule]'); // all ticked, then untick the first
   await page.$eval('[name=next_day_strategy]', (el) => { el.value = 'Only ORB, max 2 trades'; });
   await page.click('#addWatch'); await page.type('.watch-row [name=instrument]', 'NIFTY'); await page.select('.watch-row [name=bias]', 'bullish');
   await page.type('[name=charges]', '40');
@@ -95,7 +110,7 @@ try {
   t = await text();
   check(/\+₹60/.test(t) && /gross/.test(t) && /\+₹100/.test(t), 'form → day page: net ₹60 after ₹40 charges, gross ₹100');
   check(/repeated ×/.test(t), 'day page: mistake marked as repeated');
-  check(/Rules broken/.test(t), 'day page: rule broken listed');
+  check(/Rules/.test(t) && /3\/4 · 75%/.test(t), 'day page: rules 3/4 followed');
   check(/Only ORB, max 2 trades/.test(t) && /bullish/.test(t), 'day page: strategy + watchlist');
   check(/\+2\.00R/.test(t), 'day page: R column');
 
@@ -108,7 +123,7 @@ try {
   console.log('Mobile (360px):');
   await visit('#/'); // leave the dirty form before the viewport change reloads
   await page.setViewport({ width: 360, height: 740, isMobile: true, hasTouch: true });
-  for (const h of ['#/', '#/diary', '#/analytics', '#/diary/new', '#/playbook', '#/settings']) {
+  for (const h of ['#/', '#/diary', '#/analytics', '#/market', '#/diary/new', '#/playbook', '#/settings']) {
     await visit(h);
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check(over <= 1, `no horizontal overflow at 360px on ${h} (${over}px)`);

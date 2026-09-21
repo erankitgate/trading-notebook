@@ -1,7 +1,7 @@
 /* Supabase data layer. Everything the app reads or writes goes through here,
    so views never touch the client directly. api.demo.js mirrors this interface. */
 
-export const TABLES = ['diary_entries', 'learning_notes', 'highlights', 'setups', 'rules', 'settings', 'reviews'];
+export const TABLES = ['diary_entries', 'learning_notes', 'highlights', 'setups', 'rules', 'settings', 'reviews', 'capital_log', 'market_briefs'];
 
 export function createApi(cfg) {
   if (!window.supabase) throw new Error('Supabase library did not load. Check your connection and reload.');
@@ -24,7 +24,7 @@ export function createApi(cfg) {
 
     /* ---- reads ---- */
     async loadAll() {
-      const [diary, learn, pins, setups, rules, settings, reviews] = await Promise.all([
+      const [diary, learn, pins, setups, rules, settings, reviews, capital, briefs] = await Promise.all([
         sb.from('diary_entries').select('*').order('date', { ascending: false }),
         sb.from('learning_notes').select('*').order('date', { ascending: false }).order('created_at', { ascending: false }),
         sb.from('highlights').select('*').order('created_at', { ascending: true }),
@@ -32,8 +32,10 @@ export function createApi(cfg) {
         sb.from('rules').select('*').order('sort', { ascending: true }).order('created_at', { ascending: true }),
         sb.from('settings').select('*').maybeSingle(),
         sb.from('reviews').select('*').order('week_start', { ascending: false }),
+        sb.from('capital_log').select('*').order('date', { ascending: false }),
+        sb.from('market_briefs').select('*').order('date', { ascending: false }).limit(20),
       ].map((p) => p.then(unwrap)));
-      return { diary, learn, pins, setups, rules, settings: settings || null, reviews };
+      return { diary, learn, pins, setups, rules, settings: settings || null, reviews, capital, briefs };
     },
 
     /* ---- writes (all scoped by RLS to the signed-in user) ---- */
@@ -41,6 +43,8 @@ export function createApi(cfg) {
     update(table, id, row) { return sb.from(table).update(row).eq('id', id).select().single().then(unwrap); },
     remove(table, id) { return sb.from(table).delete().eq('id', id).then(unwrap); },
     /** settings has user_id as its key; upsert creates the row on first save. */
+    /** One balance per date; re-reporting the same date replaces it. */
+    logBalance(row, userId) { return sb.from('capital_log').upsert({ ...row, user_id: userId }, { onConflict: 'user_id,date' }).select().single().then(unwrap); },
     saveSettings(row, userId) { return sb.from('settings').upsert({ ...row, user_id: userId }, { onConflict: 'user_id' }).select().single().then(unwrap); },
 
     /* ---- live sync: any change to any table → onChange(); onStatus(bool) ---- */
