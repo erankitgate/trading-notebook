@@ -4,6 +4,7 @@ import { esc, li, md } from '../lib/dom.js';
 import { niceDate, arr, num } from '../lib/fmt.js';
 import { S } from '../state.js';
 import { empty } from './shared.js';
+import * as live from './live.js';
 
 const fmtN = (v, d = 2) => (v == null ? '–' : Number(v).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }));
 const sgn = (v, d = 2, suffix = '%') => (v == null ? '–' : `<span class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'muted'} num">${v > 0 ? '+' : ''}${Number(v).toFixed(d)}${suffix}</span>`);
@@ -36,6 +37,8 @@ export function render(ctx, date) {
 
   let h = `<div class="head-row"><div><p class="sub">Market brief</p><h1>${niceDate(b.date)}</h1><p class="sub">Data as of ${b.as_of ? niceDate(b.as_of) : '–'} close · updated ${b.updated_at ? new Date(b.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</p></div>
     <div class="acts">${older ? `<a class="chip" href="#/market/${esc(older.date)}">‹ ${niceDate(older.date, { day: 'numeric', month: 'short' })}</a>` : ''}${newer ? `<a class="chip" href="#/market/${esc(newer.date)}">${niceDate(newer.date, { day: 'numeric', month: 'short' })} ›</a>` : ''}</div></div>`;
+
+  h += '<section class="block live-panel" id="livePanel" aria-label="Live market"></section>';
 
   /* nifty + levels */
   const lvls = [['R3', p.r3, 'r'], ['R2', p.r2, 'r'], ['R1', p.r1, 'r'], ['PDH', p.pdh, 'r'], ['Pivot', p.pivot, 'p'], ['PDL', p.pdl, 's'], ['S1', p.s1, 's'], ['S2', p.s2, 's'], ['S3', p.s3, 's']].filter((l) => l[1] != null).sort((a, c) => c[1] - a[1]);
@@ -85,6 +88,7 @@ export function render(ctx, date) {
   }
   h += '<p class="small muted mt">Update this brief from Claude Code with <code>/brief</code>. Prices from Yahoo Finance daily candles; Indian stocks can lag by a session until the close is published.</p>';
   ctx.app.innerHTML = h;
+  live.mount(ctx.app.querySelector('#livePanel'), ctx, { date: b.date });
   for (const el of ctx.app.querySelectorAll('th.sort')) el.onclick = () => { const k = el.dataset.k; const nd = sortKey === k && dir === 'desc' ? 'asc' : 'desc'; ctx.go(`#/market/${b.date}?s=${k}&d=${nd}`); };
   // section jump-links inside the report
   const secs = ctx.app.querySelectorAll('#report h2');

@@ -7,11 +7,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 export const S = {
   user: null, loaded: false,
-  diary: [], learn: [], pins: [], setups: [], rules: [], settings: null, reviews: [], capital: [], briefs: [],
+  diary: [], learn: [], pins: [], setups: [], rules: [], settings: null, reviews: [], capital: [], briefs: [], plans: [],
 };
 
 export function setData(d) { Object.assign(S, d); S.loaded = true; }
-export function clearData() { setData({ diary: [], learn: [], pins: [], setups: [], rules: [], settings: null, reviews: [], capital: [], briefs: [] }); S.loaded = false; }
+export function clearData() { setData({ diary: [], learn: [], pins: [], setups: [], rules: [], settings: null, reviews: [], capital: [], briefs: [], plans: [] }); S.loaded = false; }
 export const activeRules = () => S.rules.filter((r) => r.active !== false);
 /** Settings with defaults filled in (settings row may not exist yet). */
 export const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.settings || {}) });

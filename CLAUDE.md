@@ -17,7 +17,7 @@ The owner opens Claude Code in this folder every day. The project slash commands
 | `/log-day` | Turns the owner's plain-English description of the day into a `diary_entries` row (trades, P&L, mistakes, lessons, plan) |
 | `/learn <topic>` | Writes a full guide as an Artifact, then saves a `learning_notes` row linking to it |
 | `/review-week` | Pulls the week's numbers from the DB, drafts the weekly review, saves it to `reviews` |
-| `/brief` | Runs `scripts/market_brief.py` (Yahoo daily candles → Nifty levels, RSI, ATR, globals, all 50 stocks), writes the narrative + plan, saves to `market_briefs` |
+| `/brief` | Numbers from `scripts/market_brief.py` + Upstox option chain, live news research (Reuters/Moneycontrol/CNBC), then a FULL written report (`market_briefs.report`, markdown) + plan + `trade_plans` rows for the session |
 | `/balance <₹>` | Records the day's account balance in `capital_log` (hero card + balance chart) |
 | `/deploy` | Runs checks + tests, commits, pushes, watches the Pages deploy until green |
 
@@ -82,7 +82,20 @@ tests/e2e/run.js      headless Chrome (puppeteer-core) walk of every route in de
 - `reviews` — weekly: `week_start (Monday, unique per user), grade A–F, what_worked [], what_didnt [], focus [], notes`.
 - `capital_log` — `date (unique per user), amount, note` — reported account balances; `stats.balanceSeries` fills gaps with diary P&L.
 - `market_briefs` — `date (session, unique per user), as_of, summary, plan [], nifty {…, pivots}, indices [], globals [], stocks [], breadth {}` — built by `/brief`.
+- `market_briefs.report` — the full written analysis (markdown; rendered by `md()` in dom.js); `oi` — option-chain summary `{weekly{expiry,pcr,max_call,max_put,call_walls,put_walls,straddle,expected_move}, monthly{…}}`.
+- `trade_plans` — per-session plans shown live: `date, instrument, instrument_key (Upstox), side, entry, stop, target, qty, condition, status (waiting|live|done|cancelled), fill, exit, note, sort`.
 - `diary_entries.rules_check` — `[{id, text, followed}]` snapshot of every rule for the day (`rules_broken` is the derived subset).
+
+## Live data (Upstox analytics token — read-only)
+
+- Token lives in the macOS Keychain (`security find-generic-password -s trading-notebook-upstox-token -w`) and as the edge-function
+  secret `UPSTOX_TOKEN` (`supabase secrets set`). Never in files, commits, or the site. Groww key/secret are in the Keychain too
+  (`trading-notebook-groww-*`) but Groww returns "Access forbidden" until the owner enables API access.
+- Edge function `supabase/functions/market-live` proxies GET-only ops (`ltp, quote, ohlc, chain, expiries, intraday, daily, status`)
+  for a signed-in user. Frontend: `api.live(op, params)`; the panel is `js/views/live.js` (mounted on Home and Market; polls 15 s in NSE hours).
+- Useful keys: `NSE_INDEX|Nifty 50`, `NSE_INDEX|Nifty Bank`, `NSE_INDEX|India VIX`; stocks `NSE_EQ|<ISIN>`; options from `chain`.
+  Nifty weekly expiry = Tuesday, monthly = last Tuesday (Sept 2026: 22, 29). Stock options monthly (Laurus 1900 CE 29 Sep = `NSE_FO|89064`, lot 850).
+- From a shell with the token: `curl -H "Authorization: Bearer $(security find-generic-password -s trading-notebook-upstox-token -w)" "https://api.upstox.com/v2/option/chain?instrument_key=NSE_INDEX%7CNifty%2050&expiry_date=YYYY-MM-DD"`.
 - `settings.start_date` — equity tracking starts here; `capital` is the balance on that date.
 All tables: RLS on, policy `(select auth.uid()) = user_id`, in the `supabase_realtime` publication.
 

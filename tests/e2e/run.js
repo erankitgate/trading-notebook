@@ -46,6 +46,9 @@ try {
   check(/Rules followed — last 30 days/.test(t) && (await page.$$('.rulelist li')).length === 4, 'home: rules compliance list');
   check((await page.$$('[data-chart="bars"] path.bar.ok, [data-chart="bars"] path.bar.mid, [data-chart="bars"] path.bar.low')).length > 5, 'home: compliance bars');
   check(/Market brief/.test(t) && /Pivot/.test(t), 'home: market teaser');
+  await page.waitForFunction(() => document.querySelectorAll('.tape .t b').length === 3 && !/—/.test(document.querySelector('.tape .t b').textContent), { timeout: 8000 });
+  check(true, 'home: live tape filled from the (demo) feed');
+  check((await page.$$('.plan-row')).length === 2 && /Unrealised/.test(await text()) && /IN TRADE/.test(await text()), 'home: live trade plans with unrealised P&L');
   await page.click('.chip.accent[href="#/?r=1w"]');
   await page.waitForFunction(() => document.querySelector('.chip.accent[href="#/?r=1w"]')?.getAttribute('aria-pressed') === 'true');
   check(/Net P&L · 1 week/.test(await text()), 'home: range chips switch the stats');

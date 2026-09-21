@@ -74,12 +74,18 @@ function build() {
     breadth: { advances: 31, declines: 19, above_sma20: 34, rsi_over_70: ['BAJFINANCE', 'MARUTI', 'ETERNAL'], rsi_under_30: ['TATAMOTORS'] },
     oi: { weekly: { expiry: today(), pcr: 1.1, max_call: 23500, max_put: 23400, call_walls: [[23500, 11.9], [23600, 10.8], [23700, 9.5]], put_walls: [[23400, 16.4], [23300, 16.1], [23000, 12.9]], straddle: 133, expected_move: 105 }, monthly: { expiry: addDays(today(), 7), pcr: 0.85, max_call: 24000, max_put: 23000, call_walls: [[24000, 11.7], [23500, 5.7]], put_walls: [[23000, 8.5], [23300, 5.6]] } },
     report: '## The one-line read\n\nNifty is oversold inside a downtrend. **Weekly expiry tomorrow** — no weekly options.\n\n## Global cues\n\n| Cue | Level | Read |\n|---|---|---|\n| Brent | $99.5, −4.2% | Saudi exports recovering |\n| Dollar index | 100.4 | Firm after the Fed hike |\n\n## Nifty technicals\n\n- Price at the 10-DMA; 20-DMA 23,747 overhead\n- RSI 37, ATR 186\n\n## Plan for the session\n\n1. Manage the open position first\n2. Long only above R1\n3. Otherwise no trade' }];
-  return { diary, learn, pins, setups, rules, settings, reviews, capital, briefs };
+  const plans = [
+    { id: uid(), user_id: USER.id, date: today(), instrument: 'NIFTY 29 SEP 23500 CE', instrument_key: 'NSE_FO|DEMO1', side: 'Buy', entry: 23490, stop: 23395, target: 23620, qty: 75, condition: 'Gap-up holds R1 23,483 for 15 min and crude still down', status: 'waiting', sort: 1, note: 'Nifty spot levels' },
+    { id: uid(), user_id: USER.id, date: today(), instrument: 'LAURUSLABS 1900 CE 29 SEP', instrument_key: 'NSE_FO|DEMO2', side: 'Buy', entry: 123.94, stop: 113, target: null, qty: 850, condition: 'Open position from yesterday', status: 'live', fill: 123.94, sort: 0, note: 'SL to break-even if it opens up' },
+  ];
+  return { diary, learn, pins, setups, rules, settings, reviews, capital, briefs, plans };
 }
 
 export function createDemoApi() {
   const db = build();
-  const tableOf = { diary_entries: 'diary', learning_notes: 'learn', highlights: 'pins', setups: 'setups', rules: 'rules', reviews: 'reviews', capital_log: 'capital', market_briefs: 'briefs' };
+  const tableOf = { diary_entries: 'diary', learning_notes: 'learn', highlights: 'pins', setups: 'setups', rules: 'rules', reviews: 'reviews', capital_log: 'capital', market_briefs: 'briefs', trade_plans: 'plans' };
+  let tick = 0;
+  const wiggle = (base, amp) => +(base + Math.sin((tick += 0.7) + base) * amp).toFixed(2);
   let onChange = () => {};
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const ping = () => setTimeout(onChange, 0);
@@ -103,5 +109,12 @@ export function createDemoApi() {
     saveSettings(row) { db.settings = { ...(db.settings || {}), ...row, user_id: USER.id }; ping(); return Promise.resolve(clone(db.settings)); },
     logBalance(row) { const i = db.capital.findIndex((c) => c.date === row.date); const full = { id: uid(), user_id: USER.id, created_at: new Date().toISOString(), ...row }; if (i >= 0) db.capital[i] = { ...db.capital[i], ...row }; else db.capital.push(full); db.capital.sort((a, b) => (a.date < b.date ? 1 : -1)); ping(); return Promise.resolve(clone(full)); },
     subscribe(cb, onStatus) { onChange = cb; setTimeout(() => onStatus(true), 0); return () => { onChange = () => {}; }; },
+    live(op, params = {}) {
+      const q = (k, base, amp, prev) => ({ [k.replace('|', ':')]: { last_price: wiggle(base, amp), net_change: +(wiggle(base, amp) - prev).toFixed(2), ohlc: { open: prev + 20, high: base + amp, low: base - amp, close: prev }, instrument_token: k } });
+      if (op === 'quote' || op === 'ltp') { const keys = String(params.keys || '').split(','); const out = {}; for (const k of keys) Object.assign(out, k.includes('Bank') ? q(k, 56480, 60, 56470.65) : k.includes('VIX') ? q(k, 11.3, 0.2, 11.25) : k.includes('DEMO1') ? q(k, 118, 6, 112) : k.includes('DEMO2') ? q(k, 124, 4, 119.3) : q(k, 23450, 40, 23414.3)); return Promise.resolve(out); }
+      if (op === 'chain') return Promise.resolve([23300, 23400, 23500, 23600].map((s) => ({ strike_price: s, pcr: 1.1, call_options: { market_data: { oi: (24000 - s) * 300, ltp: Math.max(5, 23450 - s + 60) } }, put_options: { market_data: { oi: (s - 22800) * 250, ltp: Math.max(5, s - 23450 + 60) } } })));
+      if (op === 'status') return Promise.resolve({ status: 'NORMAL_OPEN' });
+      return Promise.resolve({});
+    },
   };
 }

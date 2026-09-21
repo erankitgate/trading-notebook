@@ -1,7 +1,7 @@
 /* Supabase data layer. Everything the app reads or writes goes through here,
    so views never touch the client directly. api.demo.js mirrors this interface. */
 
-export const TABLES = ['diary_entries', 'learning_notes', 'highlights', 'setups', 'rules', 'settings', 'reviews', 'capital_log', 'market_briefs'];
+export const TABLES = ['diary_entries', 'learning_notes', 'highlights', 'setups', 'rules', 'settings', 'reviews', 'capital_log', 'market_briefs', 'trade_plans'];
 
 export function createApi(cfg) {
   if (!window.supabase) throw new Error('Supabase library did not load. Check your connection and reload.');
@@ -24,7 +24,7 @@ export function createApi(cfg) {
 
     /* ---- reads ---- */
     async loadAll() {
-      const [diary, learn, pins, setups, rules, settings, reviews, capital, briefs] = await Promise.all([
+      const [diary, learn, pins, setups, rules, settings, reviews, capital, briefs, plans] = await Promise.all([
         sb.from('diary_entries').select('*').order('date', { ascending: false }),
         sb.from('learning_notes').select('*').order('date', { ascending: false }).order('created_at', { ascending: false }),
         sb.from('highlights').select('*').order('created_at', { ascending: true }),
@@ -34,8 +34,9 @@ export function createApi(cfg) {
         sb.from('reviews').select('*').order('week_start', { ascending: false }),
         sb.from('capital_log').select('*').order('date', { ascending: false }),
         sb.from('market_briefs').select('*').order('date', { ascending: false }).limit(20),
+        sb.from('trade_plans').select('*').order('date', { ascending: false }).order('sort', { ascending: true }).limit(50),
       ].map((p) => p.then(unwrap)));
-      return { diary, learn, pins, setups, rules, settings: settings || null, reviews, capital, briefs };
+      return { diary, learn, pins, setups, rules, settings: settings || null, reviews, capital, briefs, plans };
     },
 
     /* ---- writes (all scoped by RLS to the signed-in user) ---- */
@@ -46,6 +47,17 @@ export function createApi(cfg) {
     /** One balance per date; re-reporting the same date replaces it. */
     logBalance(row, userId) { return sb.from('capital_log').upsert({ ...row, user_id: userId }, { onConflict: 'user_id,date' }).select().single().then(unwrap); },
     saveSettings(row, userId) { return sb.from('settings').upsert({ ...row, user_id: userId }, { onConflict: 'user_id' }).select().single().then(unwrap); },
+
+    /* ---- live market data via the market-live edge function (owner's session only) ---- */
+    async live(op, params = {}) {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) throw new Error('sign in first');
+      const q = new URLSearchParams({ op, ...params });
+      const r = await fetch(`${cfg.supabaseUrl}/functions/v1/market-live?${q}`, { headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${session.access_token}` } });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || body.errors?.[0]?.message || `live data HTTP ${r.status}`);
+      return body.data ?? body;
+    },
 
     /* ---- live sync: any change to any table → onChange(); onStatus(bool) ---- */
     subscribe(onChange, onStatus) {

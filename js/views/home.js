@@ -8,6 +8,7 @@ import { explain } from '../api.js';
 import { S, settings, entryByDate, activeRules } from '../state.js';
 import { diaryList, flagsHtml, bindFlags, planHtml, alertsHtml } from './shared.js';
 import { briefTeaser } from './market.js';
+import * as live from './live.js';
 
 const fmtPF = (pf) => (pf == null ? '–' : pf === Infinity ? '∞' : pf.toFixed(2));
 const tile = (label, value, detail = '', tone = '') => `<div class="stat ${tone}"><small>${label}</small><b>${value}</b>${detail ? `<span class="d">${detail}</span>` : ''}</div>`;
@@ -42,6 +43,7 @@ export function render(ctx) {
       <form id="balForm"><input name="amount" type="number" step="any" inputmode="decimal" placeholder="Today's balance ₹" aria-label="Today's account balance"><button class="btn small" type="submit">Update</button></form>
     </div></section>`;
 
+  h += '<section class="block live-panel" id="livePanel" aria-label="Live market"></section>';
   h += flagsHtml();
 
   /* today strip */
@@ -107,6 +109,7 @@ export function render(ctx) {
   ctx.app.innerHTML = h;
   bindFlags(ctx.app, ctx);
   bindCharts(ctx.app);
+  live.mount(ctx.app.querySelector('#livePanel'), ctx, { date: S.briefs[0] && S.briefs[0].date >= t ? S.briefs[0].date : t, compact: true });
   const bf = ctx.app.querySelector('#balForm');
   bf.onsubmit = (ev) => {
     ev.preventDefault();

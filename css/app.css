@@ -407,3 +407,27 @@ th.sort[aria-sort=descending]::after { content: " ▾"; } th.sort[aria-sort=asce
 .walls .bar { height: 6px; border-radius: 999px; background: var(--line-soft); margin-top: 2px; overflow: hidden; }
 .walls .bar i { display: block; height: 100%; }
 .walls .c .bar i { background: var(--down); } .walls .p .bar i { background: var(--up); }
+
+/* ---------- live panel ---------- */
+.live-panel { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; background: color-mix(in srgb, var(--accent) 4%, var(--paper)); }
+.tape { display: flex; gap: 8px; overflow-x: auto; margin-top: 10px; scrollbar-width: thin; }
+.tape .t { flex: 1 0 150px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; border-left-width: 4px; }
+.tape .t.pos { border-left-color: var(--up); } .tape .t.neg { border-left-color: var(--down); }
+.tape small { display: block; color: var(--muted); font-weight: 700; font-size: .74rem; }
+.tape b { display: block; font-size: 1.25rem; }
+.tape .c { display: block; font-size: .8rem; font-weight: 700; }
+.tape .rng { display: block; font-size: .74rem; color: var(--muted); }
+.plans { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 12px; }
+.plan-row { min-width: 0; }
+.plan-row { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; border-left: 5px solid var(--line); }
+.plan-row.st-live { border-left-color: var(--accent); }
+.plan-row.near { border-left-color: var(--amber); background: color-mix(in srgb, var(--amber) 8%, var(--paper)); }
+.plan-row.hit { border-left-color: var(--down); background: color-mix(in srgb, var(--down) 8%, var(--paper)); }
+.plan-row.tgt { border-left-color: var(--up); background: color-mix(in srgb, var(--up) 8%, var(--paper)); }
+.plan-row .head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.plan-row .lv { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
+.plan-row .lv small { display: block; color: var(--muted); font-size: .72rem; font-weight: 700; }
+.plan-row .lv b { display: block; font-size: 1.05rem; }
+.plan-row .lv i { display: block; font-style: normal; font-size: .76rem; font-weight: 700; }
+.plan-row .acts { display: flex; gap: 6px; margin-top: 8px; }
+details summary { cursor: pointer; }
