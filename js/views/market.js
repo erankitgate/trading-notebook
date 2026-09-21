@@ -1,6 +1,6 @@
 /* Market brief: one per session — Nifty levels, global cues, breadth, all Nifty 50 stocks, plan. */
 
-import { esc, li } from '../lib/dom.js';
+import { esc, li, md } from '../lib/dom.js';
 import { niceDate, arr, num } from '../lib/fmt.js';
 import { S } from '../state.js';
 import { empty } from './shared.js';
@@ -48,9 +48,20 @@ export function render(ctx, date) {
     ${arr(b.indices).map((x) => `<div class="kpi ${x.name.includes('VIX') ? (x.chg_1d > 0 ? 'warn' : '') : x.chg_1d > 0 ? 'good' : x.chg_1d < 0 ? 'bad' : ''}"><small>${esc(x.name)}</small><b class="num">${fmtN(x.close, x.name.includes('VIX') ? 2 : 0)}</b><span class="d">${sgn(x.chg_1d)} · RSI ${rsiTag(x.rsi)} ${trendTag(x.trend)}</span>${x.pivots ? `<div class="small muted mt">S1 ${fmtN(x.pivots.s1, 0)} · P ${fmtN(x.pivots.pivot, 0)} · R1 ${fmtN(x.pivots.r1, 0)}</div>` : ''}</div>`).join('')}
   </div>`;
 
-  /* summary + plan */
-  if (b.summary) h += `<div class="block"><h2>Read</h2><p class="summary">${esc(b.summary)}</p></div>`;
-  if (arr(b.plan).length) h += `<div class="block"><h2>Plan for the session</h2><div class="plan next"><ul>${li(arr(b.plan))}</ul></div></div>`;
+  /* option chain walls */
+  const oi = b.oi || {};
+  const wallList = (walls, cls) => { const max = Math.max(...walls.map((w) => w[1]), 1); return `<ul class="${cls}">${walls.map(([k, v]) => `<li><span><b class="num">${fmtN(k, 0)}</b><div class="bar"><i style="width:${Math.round((v / max) * 100)}%"></i></div></span><span class="num muted">${v}M</span></li>`).join('')}</ul>`; };
+  const oiCard = (o, title) => (!o ? '' : `<div class="kpi"><small>${title} · expiry ${niceDate(o.expiry, { day: 'numeric', month: 'short' })} · PCR ${o.pcr}</small><div class="walls"><div class="c"><div class="small muted">Call walls (resistance)</div>${wallList(arr(o.call_walls), 'c')}</div><div class="p"><div class="small muted">Put walls (support)</div>${wallList(arr(o.put_walls), 'p')}</div></div>${o.straddle ? `<div class="small muted mt">ATM straddle ${o.straddle} → market prices ±${o.expected_move} points</div>` : ''}</div>`);
+  if (oi.weekly || oi.monthly) h += `<div class="block"><h2>Option chain</h2><div class="brief-grid">${oiCard(oi.weekly, 'Weekly')}${oiCard(oi.monthly, 'Monthly')}</div>${oi.note ? `<p class="small muted mt">${esc(oi.note)}</p>` : ''}</div>`;
+
+  /* plan (always near the top) */
+  if (arr(b.plan).length) h += `<div class="block"><h2>Plan for the session</h2><div class="plan next"><ol>${li(arr(b.plan))}</ol></div></div>`;
+
+  /* the written report */
+  if (b.report) {
+    const heads = [...String(b.report).matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+    h += `<div class="block"><h2>Full analysis</h2>${heads.length ? `<div class="toc-inline">${heads.map((t, i) => `<a class="chip" href="#/market/${esc(b.date)}?s=${sortKey}&d=${dir}#sec${i}" data-sec="${i}">${esc(t)}</a>`).join('')}</div>` : ''}<div class="report" id="report">${md(b.report)}</div></div>`;
+  } else if (b.summary) h += `<div class="block"><h2>Read</h2><p class="summary">${esc(b.summary)}</p></div>`;
 
   /* globals */
   if (arr(b.globals).length) {
@@ -75,4 +86,8 @@ export function render(ctx, date) {
   h += '<p class="small muted mt">Update this brief from Claude Code with <code>/brief</code>. Prices from Yahoo Finance daily candles; Indian stocks can lag by a session until the close is published.</p>';
   ctx.app.innerHTML = h;
   for (const el of ctx.app.querySelectorAll('th.sort')) el.onclick = () => { const k = el.dataset.k; const nd = sortKey === k && dir === 'desc' ? 'asc' : 'desc'; ctx.go(`#/market/${b.date}?s=${k}&d=${nd}`); };
+  // section jump-links inside the report
+  const secs = ctx.app.querySelectorAll('#report h2');
+  secs.forEach((el, i) => { el.id = `sec${i}`; });
+  for (const a of ctx.app.querySelectorAll('[data-sec]')) a.onclick = (ev) => { ev.preventDefault(); secs[+a.dataset.sec]?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 }

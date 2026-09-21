@@ -30,6 +30,8 @@ export function list(ctx) {
   let h = `<div class="head-row"><div><h1>Daily trade diary</h1><p class="sub">Newest first. Tap a day to open its page.</p></div><a class="btn" href="#/diary/new">+ New day</a></div>`;
   h += `<form class="filters" id="filters"><input type="search" name="q" value="${esc(search)}" placeholder="Search instrument, setup, mistake, lesson…" aria-label="Search diary"><div class="chips">${FILTERS.map(([v, l]) => `<button type="button" class="chip" data-f="${v}" aria-pressed="${v === filter}">${l}</button>`).join('')}</div></form>`;
 
+  const nextBrief = S.briefs.find((b) => !S.diary.some((e) => e.date === b.date));
+  if (nextBrief && filter === 'all' && !search) h += `<div class="block"><div class="alert good"><span>📈</span><span><b>Analysis for ${niceDate(nextBrief.date)}</b> is ready — <a href="#/market/${esc(nextBrief.date)}">read the brief and the plan</a>, then log the day here after the close.</span></div></div>`;
   if (!S.diary.length) h += `<div class="block">${empty('<strong>No diary pages yet.</strong> Tap “New day” to write your first page.')}</div>`;
   else if (!items.length) h += `<div class="block">${empty('Nothing matches this filter.')}</div>`;
   else {
@@ -70,6 +72,8 @@ export function entry(ctx, date) {
   if (e.plan_followed) tags.push([{ yes: 'good', partly: 'warn', no: 'bad' }[e.plan_followed], { yes: 'Followed the plan', partly: 'Partly followed the plan', no: 'Did not follow the plan' }[e.plan_followed]]);
   h += `<div class="tags">${tags.map(([c, t]) => `<span class="tag ${c}">${esc(t)}</span>`).join('')}<a class="btn small ghost" href="#/diary/${esc(e.date)}/edit">Edit page</a></div>`;
   h += alertsHtml(dayLimits(e, cfg));
+  const brief = S.briefs.find((b) => b.date === e.date);
+  if (brief) h += `<div class="block"><div class="section-head"><h2>Market brief for this session</h2><a class="btn small" href="#/market/${esc(brief.date)}">Read the full analysis</a></div>${brief.summary ? `<p class="summary small">${esc(brief.summary)}</p>` : ''}${arr(brief.plan).length ? `<div class="plan next"><ol>${li(arr(brief.plan).slice(0, 3))}</ol></div>` : ''}</div>`;
 
   /* yesterday's plan */
   h += '<div class="block"><h2>Yesterday\'s plan</h2>';

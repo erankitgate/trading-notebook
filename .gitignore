@@ -6,3 +6,5 @@ tests/e2e/.artifacts/
 .env
 .env.*
 .brief.json
+.secrets/
+*.token

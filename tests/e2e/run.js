@@ -53,6 +53,8 @@ try {
   t = await visit('#/market');
   check(/Nifty 50/.test(t) && /you are here/.test(t) && /Global cues/.test(t) && /All Nifty 50 stocks/.test(t), 'market: brief renders');
   check((await page.$$('.stocks-table tbody tr')).length === 20, 'market: stocks table');
+  check((await page.$$('#report h2')).length === 4 && (await page.$$('#report table.md')).length === 1, 'market: written report renders with sections and a table');
+  check(/Call walls/.test(t) && /ATM straddle/.test(t), 'market: option-chain walls');
   await page.click('th.sort[data-k="rsi"]');
   await page.waitForFunction(() => location.hash.includes('s=rsi'));
   await page.waitForFunction(() => document.querySelector('th.sort[data-k="rsi"]')?.getAttribute('aria-sort') === 'descending');
