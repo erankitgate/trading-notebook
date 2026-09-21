@@ -16,6 +16,8 @@ export function createApi(cfg) {
     /* ---- auth ---- */
     onAuth(cb) { sb.auth.onAuthStateChange((_evt, session) => cb(session?.user ?? null)); },
     signIn(email) { return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }).then(unwrap); },
+    /** The login email carries a 6-digit code as well as the link; the code works on any device. */
+    verifyCode(email, token) { return sb.auth.verifyOtp({ email, token, type: 'email' }).then(unwrap); },
     signOut() { return sb.auth.signOut(); },
 
     /* ---- reads ---- */
