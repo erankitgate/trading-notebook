@@ -1,0 +1,17 @@
+{
+  "name": "trading-notebook",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Personal options-trading journal: diary, playbook, analytics, learning. Static site on GitHub Pages + Supabase.",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 8080 --bind 127.0.0.1",
+    "check": "bash scripts/check.sh",
+    "test": "node --test tests/unit/",
+    "test:e2e": "node tests/e2e/run.js",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^22.15.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "My Trading Notebook",
+  "short_name": "Notebook",
+  "description": "Daily trade diary, playbook, analytics and learning notes.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F5F8",
+  "theme_color": "#2C3244",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

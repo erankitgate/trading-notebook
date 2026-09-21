@@ -1,0 +1,7 @@
+.DS_Store
+_site/
+node_modules/
+tests/e2e/.artifacts/
+*.log
+.env
+.env.*
