@@ -11,7 +11,9 @@ export function render(ctx, msg) {
   let remembered = '';
   try { remembered = localStorage.getItem('notebook.email') || ''; } catch { /* private mode */ }
   ctx.app.innerHTML = `<div class="login"><h1>Sign in</h1><p class="sub">Enter your email. You'll get a mail with a login link and a 6-digit code — no password.</p>
-    <form id="lg" novalidate><label for="em">Email</label><input id="em" name="email" type="email" autocomplete="email" inputmode="email" value="${esc(remembered)}" required><button class="btn" type="submit">Send login email</button></form>
+    <form id="lg" novalidate><label for="em">Email</label><input id="em" name="email" type="email" autocomplete="username" inputmode="email" value="${esc(remembered)}" required>
+      <label for="pw">Password <span class="muted">(leave blank to get an email instead)</span></label><input id="pw" name="password" type="password" autocomplete="current-password">
+      <div class="acts"><button class="btn" type="submit">Sign in</button><button class="btn ghost" type="button" id="sendMail">Email me a link / code</button></div></form>
     <p class="err" id="err" role="alert">${esc(msg || '')}</p>
     <p class="small muted">Already have a code? <a href="#" id="haveCode">Enter it</a>. Just looking? <a href="?demo=1#/">Open the demo</a> with sample data.</p></div>`;
   const f = ctx.app.querySelector('#lg'), err = ctx.app.querySelector('#err');
@@ -37,13 +39,25 @@ export function render(ctx, msg) {
     if (!EMAIL.test(email)) { err.textContent = 'Enter your email first.'; f.email.focus(); return; }
     codeStep(email);
   };
-  f.onsubmit = (ev) => {
-    ev.preventDefault(); err.textContent = '';
+  const remember = (email) => { try { localStorage.setItem('notebook.email', email); } catch { /* ignore */ } };
+  const sendMail = () => {
+    err.textContent = '';
     const email = f.email.value.trim();
     if (!EMAIL.test(email)) { err.textContent = 'Enter a valid email address.'; f.email.focus(); return; }
-    busy(f.querySelector('button'), 'Sending…', async () => {
-      try { await ctx.api.signIn(email); try { localStorage.setItem('notebook.email', email); } catch { /* ignore */ } codeStep(email); }
+    busy(f.querySelector('#sendMail'), 'Sending…', async () => {
+      try { await ctx.api.signIn(email); remember(email); codeStep(email); }
       catch (e) { err.textContent = rateLimited(e); }
+    });
+  };
+  f.querySelector('#sendMail').onclick = sendMail;
+  f.onsubmit = (ev) => {
+    ev.preventDefault(); err.textContent = '';
+    const email = f.email.value.trim(), password = f.password.value;
+    if (!EMAIL.test(email)) { err.textContent = 'Enter a valid email address.'; f.email.focus(); return; }
+    if (!password) { sendMail(); return; }
+    busy(f.querySelector('[type=submit]'), 'Signing in…', async () => {
+      try { await ctx.api.signInPassword(email, password); remember(email); /* onAuth takes over */ }
+      catch (e) { err.textContent = /invalid login/i.test(e.message || '') ? 'Wrong email or password.' : explain(e); f.password.focus(); }
     });
   };
 }

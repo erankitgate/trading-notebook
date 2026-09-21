@@ -18,6 +18,10 @@ export function render(ctx) {
     </div></fieldset>
     <fieldset><legend>Pre-market checklist</legend><div class="grid one"><div><label>One item per line (shows as checkboxes on every new diary page)</label><textarea name="checklist" rows="6">${esc(arr(cfg.checklist).join('\n'))}</textarea></div></div></fieldset>
     <div class="form-acts"><button class="btn" type="submit">Save settings</button></div><div class="err" id="err" role="alert"></div></form>
+    <form id="pf" novalidate class="block"><h2>Password</h2><p class="sub small">Optional. With a password you can sign in without waiting for an email.</p><div class="grid">
+      <div><label>New password (8+ characters)</label><input name="p1" type="password" autocomplete="new-password" minlength="8"></div>
+      <div><label>Repeat it</label><input name="p2" type="password" autocomplete="new-password" minlength="8"></div></div>
+      <div class="form-acts"><button class="btn ghost" type="submit">Set password</button></div><div class="err" id="perr" role="alert"></div></form>
     <div class="block"><h2>Your data</h2><p class="sub small">Everything lives in your Supabase project. Download a copy any time.</p><div class="acts mt"><button type="button" class="btn ghost small" id="expJson">Download everything (JSON)</button> <button type="button" class="btn ghost small" id="expCsv">Download trades (CSV)</button></div></div>
     <div class="block"><h2>Phone</h2><p class="small muted">Chrome on Android: ⋮ → <b>Add to Home screen</b>. Safari on iPhone: Share → <b>Add to Home Screen</b>. It opens like an app.</p></div>`;
 
@@ -28,6 +32,16 @@ export function render(ctx) {
     if (row.risk_per_trade_pct < 0 || row.risk_per_trade_pct > 100) { err.textContent = 'Risk per trade must be between 0 and 100.'; return; }
     busy(f.querySelector('[type=submit]'), 'Saving…', async () => {
       try { await ctx.api.saveSettings(row, S.user.id); toast('Settings saved'); await ctx.reload(); ctx.go('#/settings'); } catch (e) { err.textContent = explain(e); }
+    });
+  };
+  const pf = ctx.app.querySelector('#pf'), perr = pf.querySelector('#perr');
+  pf.onsubmit = (ev) => {
+    ev.preventDefault(); perr.textContent = '';
+    const p1 = pf.p1.value, p2 = pf.p2.value;
+    if (p1.length < 8) { perr.textContent = 'Use at least 8 characters.'; pf.p1.focus(); return; }
+    if (p1 !== p2) { perr.textContent = 'The two passwords differ.'; pf.p2.focus(); return; }
+    busy(pf.querySelector('[type=submit]'), 'Saving…', async () => {
+      try { await ctx.api.setPassword(p1); pf.reset(); toast('Password set'); } catch (e) { perr.textContent = explain(e); }
     });
   };
   ctx.app.querySelector('#expJson').onclick = () => download(`trading-notebook-${today()}.json`, JSON.stringify({ exported_at: new Date().toISOString(), diary: S.diary, learning: S.learn, highlights: S.pins, setups: S.setups, rules: S.rules, settings: S.settings, reviews: S.reviews }, null, 2));

@@ -75,6 +75,8 @@ export function createDemoApi() {
     onAuth(cb) { setTimeout(() => cb(USER), 0); },
     signIn() { return Promise.resolve(); },
     verifyCode() { return Promise.resolve(); },
+    signInPassword() { return Promise.resolve(); },
+    setPassword() { return Promise.resolve(); },
     signOut() { location.href = location.pathname; return Promise.resolve(); },
     loadAll() { return Promise.resolve(clone(db)); },
     insert(table, row) {

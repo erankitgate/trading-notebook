@@ -18,6 +18,8 @@ export function createApi(cfg) {
     signIn(email) { return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }).then(unwrap); },
     /** The login email carries a 6-digit code as well as the link; the code works on any device. */
     verifyCode(email, token) { return sb.auth.verifyOtp({ email, token, type: 'email' }).then(unwrap); },
+    signInPassword(email, password) { return sb.auth.signInWithPassword({ email, password }).then(unwrap); },
+    setPassword(password) { return sb.auth.updateUser({ password }).then(unwrap); },
     signOut() { return sb.auth.signOut(); },
 
     /* ---- reads ---- */
