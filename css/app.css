@@ -223,9 +223,13 @@ tfoot td { font-weight: 700; border-bottom: 0; }
 .rulebook { list-style: none; margin: 0; padding: 0; }
 .rulebook li { display: flex; gap: 10px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--line); }
 .rulebook li:last-child { border-bottom: 1px solid var(--line); }
-.rulebook li span { flex: 1; }
+.rulebook li > span:first-child { flex: 1; min-width: 0; }
 .rulebook li.off span { color: var(--muted); text-decoration: line-through; }
-.rulebook .acts { display: flex; gap: 6px; }
+.rulebook li .pct { flex: none; font-weight: 800; min-width: 40px; text-align: right; }
+.rulebook li .bar { height: 5px; margin-top: 5px; background: var(--line-soft); border-radius: 999px; overflow: hidden; max-width: 220px; }
+.rulebook li .bar i { display: block; height: 100%; background: var(--up); }
+.rulebook li .bar i.mid { background: var(--amber); } .rulebook li .bar i.low { background: var(--down); }
+.rulebook .acts { display: flex; gap: 6px; flex: none; }
 
 /* ---------- forms ---------- */
 form .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
@@ -486,3 +490,36 @@ details summary { cursor: pointer; }
 .payoff-t th, .payoff-t td { padding: 5px 8px; white-space: nowrap; }
 .payoff-t th.now, .payoff-t td.now { background: var(--accent-soft); font-weight: 800; }
 .payoff-t td:first-child { color: var(--muted); font-weight: 600; }
+/* compact live summary (Home) */
+.plans-compact { display: grid; gap: 6px; margin-top: 10px; }
+.live-line { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--bg); text-decoration: none; color: var(--ink); flex-wrap: wrap; border-left: 3px solid var(--line); }
+.live-line.st-live { border-left-color: var(--accent); }
+.live-line b { font-size: .92rem; }
+.live-line > *:last-child { margin-left: auto; }
+/* dashboard mini stat row + section links */
+.mini-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 14px; }
+.mini-stats .kpi small { font-size: .74rem; }
+.mini-stats .kpi b { font-size: 1.15rem; }
+.section-link { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); text-decoration: none; color: var(--ink); background: var(--paper); box-shadow: var(--shadow); margin-top: 10px; }
+.section-link:hover { border-color: var(--accent); }
+.section-link .t { font-weight: 700; }
+.section-link .d { display: block; color: var(--muted); font-size: .85rem; font-weight: 400; margin-top: 2px; }
+.section-link .c { color: var(--muted); font-weight: 700; font-size: .88rem; white-space: nowrap; }
+/* NSE-style live tape: bigger, more saturated cards; flash on price change */
+.tape .t.big { flex: 1 0 170px; padding: 10px 14px; border-left-width: 5px; }
+.tape .t.big b { font-size: 1.5rem; }
+.tape .t.big.pos { background: color-mix(in srgb, var(--up) 12%, var(--paper)); }
+.tape .t.big.neg { background: color-mix(in srgb, var(--down) 12%, var(--paper)); }
+@keyframes flashUp { 0% { background: color-mix(in srgb, var(--up) 55%, transparent); border-radius: 6px; } 100% { background: transparent; } }
+@keyframes flashDown { 0% { background: color-mix(in srgb, var(--down) 55%, transparent); border-radius: 6px; } 100% { background: transparent; } }
+.flash-up { animation: flashUp .9s ease-out; }
+.flash-down { animation: flashDown .9s ease-out; }
+/* scrolling ticker strip, classic exchange marquee */
+.ticker-wrap { overflow: hidden; margin-top: 10px; border-radius: 10px; background: var(--pill); padding: 8px 0; }
+.ticker-track { display: inline-flex; white-space: nowrap; animation: tickerScroll 45s linear infinite; }
+.ticker-wrap:hover .ticker-track { animation-play-state: paused; }
+@keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.tk { display: inline-flex; align-items: center; gap: 6px; padding: 0 16px; font-size: .85rem; font-weight: 700; color: var(--pill-ink); border-right: 1px solid color-mix(in srgb, var(--pill-ink) 15%, transparent); }
+.tk i { font-style: normal; font-weight: 800; }
+.tk.pos { color: var(--up); } .tk.neg { color: var(--down); }
+@media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }

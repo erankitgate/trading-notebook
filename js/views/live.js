@@ -2,7 +2,7 @@
    Polls the market-live edge function every 15 s while NSE is open; once when closed. */
 
 import { esc, attr, toast, options } from '../lib/dom.js';
-import { money, cls, rmult, niceDate, today, num, round2 } from '../lib/fmt.js';
+import { money, cls, rmult, niceDate, today, num, round2, arr } from '../lib/fmt.js';
 import { explain } from '../api.js';
 import { S } from '../state.js';
 import { requireChecklist } from './checklistGate.js';
@@ -11,6 +11,22 @@ import { payoffGrid, premiumAt } from '../lib/options.js';
 const INDEX_KEYS = ['NSE_INDEX|Nifty 50', 'NSE_INDEX|Nifty Bank', 'NSE_INDEX|India VIX'];
 const NAMES = { 'NSE_INDEX|Nifty 50': 'Nifty 50', 'NSE_INDEX|Nifty Bank': 'Bank Nifty', 'NSE_INDEX|India VIX': 'India VIX' };
 const POLL_OPEN = 15000, POLL_CLOSED = 120000;
+
+/** NSE-style scrolling ticker strip from the latest brief's stock list (end-of-day data, clearly labelled). */
+function tickerStrip(stocks) {
+  const items = stocks.map((x) => `<span class="tk ${x.chg_1d > 0 ? 'pos' : x.chg_1d < 0 ? 'neg' : ''}">${esc(x.symbol)} <b class="num">${fmtN(x.close, x.close >= 1000 ? 0 : 2)}</b> <i>${x.chg_1d > 0 ? '▲' : x.chg_1d < 0 ? '▼' : '•'} ${x.chg_1d == null ? '' : `${x.chg_1d > 0 ? '+' : ''}${x.chg_1d.toFixed(2)}%`}</i></span>`).join('');
+  return `<div class="ticker-wrap" aria-label="Nifty 50 stocks, from today's brief"><div class="ticker-track">${items}${items}</div></div>`;
+}
+
+/** Flash a value green/up or red/down for a moment when it changes between polls — the NSE-ticker feel. */
+function flashChanges(box, prevVals) {
+  for (const el of box.querySelectorAll('[data-qk]')) {
+    const qk = el.dataset.qk, val = el.textContent.replace(/[^0-9.-]/g, '');
+    const prev = prevVals.get(qk);
+    if (prev != null && prev !== val) { el.classList.add(parseFloat(val) > parseFloat(prev) ? 'flash-up' : 'flash-down'); setTimeout(() => el.classList.remove('flash-up', 'flash-down'), 900); }
+    prevVals.set(qk, val);
+  }
+}
 
 /** NSE cash hours in IST, Mon–Fri (holidays ignored — the tape just stops moving). */
 export function marketOpen(d = new Date()) {
@@ -49,6 +65,20 @@ function payoffTable(p, niftySpot) {
     ${premiumNow ? `<div class="small muted mt">At the current spot, this position is roughly ${cls(premiumNow.pnl) === 'pos' ? 'up' : 'down'} <b class="${cls(premiumNow.pnl)}">${money(premiumNow.pnl)}</b> — an estimate; check the LTP above for the real mark.</div>` : ''}</div>`;
 }
 
+/** One-line summary for the compact (Home) view: instrument, status, unrealised P&L, distance to entry. */
+function planLine(p, quotes, niftySpot) {
+  const isOption = !!(p.option_type && p.strike);
+  const q = !isOption && p.instrument_key ? quotes[p.instrument_key.replace('|', ':')] : null;
+  const estPremium = isOption && niftySpot != null ? premiumAt(p, niftySpot, daysUntil(p.expiry) ?? 14, p.iv ?? 15) : null;
+  const ltp = isOption ? (estPremium != null ? round2(estPremium) : null) : (q?.last_price ?? null);
+  const pl = planPnl(p, ltp);
+  const ref = p.status === 'live' ? p.fill : p.entry;
+  const away = p.status === 'waiting' && ref != null && ltp != null ? dist(ref, ltp) : null;
+  return `<a class="live-line st-${p.status}" href="#/live"><span class="tag small ${p.side === 'Sell' ? 'bad' : 'good'}">${esc(p.side)}</span><b>${esc(p.instrument)}</b>
+    <span class="tag small">${p.status === 'live' ? 'IN TRADE' : p.status === 'done' ? 'closed' : 'waiting'}</span>
+    ${pl ? `<b class="num ${cls(pl.pnl)}">${money(pl.pnl, { compact: true })}</b>` : away != null ? `<span class="muted small">${away > 0 ? '+' : ''}${away.toFixed(2)}% away</span>` : p.status === 'done' && p.exit != null ? `<b class="num ${cls((p.exit - p.fill) * (p.side === 'Sell' ? -1 : 1))}">${money((p.exit - p.fill) * (p.side === 'Sell' ? -1 : 1) * (p.qty || 1), { compact: true })}</b>` : ''}</a>`;
+}
+
 function planRow(p, quotes, niftySpot) {
   const isOption = !!(p.option_type && p.strike);
   // For an option plan, "LTP" is an estimate from Black-Scholes off the live underlying — the app has no
@@ -64,7 +94,7 @@ function planRow(p, quotes, niftySpot) {
   const near = ltp != null && p.status === 'waiting' && p.entry != null && Math.abs(dist(p.entry, ltp)) <= 0.25;
   return `<div class="plan-row st-${p.status} ${hit ? 'hit' : tgt ? 'tgt' : near ? 'near' : ''}" data-plan="${attr(p.id)}" data-date="${attr(p.date)}">
     <div class="head"><b>${esc(p.instrument)}</b> <span class="tag ${p.side === 'Sell' ? 'bad' : 'good'}">${esc(p.side)}</span> <span class="tag">${p.status === 'live' ? 'IN TRADE' : p.status === 'done' ? 'closed' : 'waiting'}</span>${p.qty ? `<span class="muted small"> · qty ${p.qty}</span>` : ''}${isOption ? '<span class="tag warn">est. premium</span>' : ''}</div>
-    <div class="lv"><span><small>${isOption ? 'Est. LTP' : 'LTP'}</small><b class="num">${ltp != null ? fmtN(ltp) : '—'}</b>${q?.net_change != null ? `<i class="${cls(q.net_change)}">${q.net_change > 0 ? '+' : ''}${fmtN(q.net_change)}</i>` : ''}${isOption && niftySpot != null ? `<i class="muted">Nifty ${fmtN(niftySpot, 0)}</i>` : ''}</span>
+    <div class="lv"><span><small>${isOption ? 'Est. LTP' : 'LTP'}</small><b class="num" data-qk="plan:${esc(p.id)}">${ltp != null ? fmtN(ltp) : '—'}</b>${q?.net_change != null ? `<i class="${cls(q.net_change)}">${q.net_change > 0 ? '+' : ''}${fmtN(q.net_change)}</i>` : ''}${isOption && niftySpot != null ? `<i class="muted">Nifty ${fmtN(niftySpot, 0)}</i>` : ''}</span>
       <span><small>${p.status === 'live' ? 'Fill' : 'Entry'}</small><b class="num">${ref != null ? fmtN(ref) : '—'}</b>${ltp != null && ref != null && p.status === 'waiting' ? `<i class="muted">${dist(ref, ltp) > 0 ? '+' : ''}${dist(ref, ltp).toFixed(2)}% away</i>` : ''}</span>
       <span><small>Stop</small><b class="num neg">${p.stop != null ? fmtN(p.stop) : '—'}</b>${toStop != null ? `<i class="${hit ? 'neg' : 'muted'}">${hit ? 'STOP HIT' : `${fmtN(Math.abs(toStop), 0)} away`}</i>` : ''}</span>
       <span><small>Target</small><b class="num pos">${p.target != null ? fmtN(p.target) : '—'}</b>${toTarget != null ? `<i class="${tgt ? 'pos' : 'muted'}">${tgt ? 'TARGET HIT' : `${fmtN(Math.abs(toTarget), 0)} away`}</i>` : ''}</span>
@@ -75,17 +105,35 @@ function planRow(p, quotes, niftySpot) {
     <div class="acts">${p.status === 'waiting' ? `<button type="button" class="btn small" data-act="live">Mark in trade</button>` : ''}${p.status === 'live' ? `<button type="button" class="btn small" data-act="done">Close</button>` : ''}${p.status !== 'done' ? `<button type="button" class="btn small ghost" data-act="cancel">Cancel</button>` : ''}</div></div>`;
 }
 
+/** Full page: date picker across recent sessions + the live panel. */
+export function render(ctx) {
+  ctx.setNav('live');
+  const dates = [...new Set([today(), ...S.plans.map((p) => p.date), ...S.briefs.map((b) => b.date)])].sort().reverse().slice(0, 14);
+  const date = dates.includes(ctx.query.get('d')) ? ctx.query.get('d') : dates[0] || today();
+  ctx.app.innerHTML = `<div class="head-row"><div><h1>Live</h1><p class="sub">Index tape, today's plans against live prices, and the option chain.</p></div>
+    <div class="chips">${dates.map((d) => `<a class="chip" href="#/live?d=${d}" aria-pressed="${d === date}">${d === today() ? 'Today' : niceDate(d, { day: 'numeric', month: 'short' })}</a>`).join('')}</div></div>
+    <section id="livePanel"></section>`;
+  mount(ctx.app.querySelector('#livePanel'), ctx, { date });
+}
+
 /** Mount the live panel into `box`; returns a stop() function. */
 export function mount(box, ctx, { date = today(), compact = false } = {}) {
   const plans = plansFor(date);
   const keys = [...INDEX_KEYS, ...planKeys(plans)];
-  let timer = null, quotes = {}, chain = null, lastAt = null, err = null;
+  let timer = null, quotes = {}, chain = null, lastAt = null, err = null; const prevVals = new Map();
 
   const draw = () => {
     const open = marketOpen();
     let h = `<div class="section-head"><h2>Live · ${niceDate(date, { weekday: 'short', day: 'numeric', month: 'short' })}</h2><span class="live ${err ? 'off' : open ? 'on' : ''}"><i></i><span>${err ? esc(err) : open ? 'NSE open' : 'Market closed'}${lastAt ? ` · ${lastAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}</span></span></div>`;
-    h += `<div class="tape">${INDEX_KEYS.map((k) => { const q = quotes[k.replace('|', ':')]; const chg = q?.net_change, pct = q && q.ohlc?.close ? (chg / q.ohlc.close) * 100 : null; return `<div class="t ${chg > 0 ? 'pos' : chg < 0 ? 'neg' : ''}"><small>${NAMES[k]}</small><b class="num">${q ? fmtN(q.last_price, k.includes('VIX') ? 2 : 1) : '—'}</b><span class="c ${chg > 0 ? 'pos' : chg < 0 ? 'neg' : 'muted'}">${chg != null ? `${chg > 0 ? '+' : ''}${fmtN(chg, k.includes('VIX') ? 2 : 1)}${pct != null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''}` : ''}</span>${q?.ohlc ? `<span class="rng num">${fmtN(q.ohlc.low, 0)} – ${fmtN(q.ohlc.high, 0)}</span>` : ''}</div>`; }).join('')}</div>`;
-    if (plans.length) h += `<div class="plans">${plans.map((p) => planRow(p, quotes, quotes['NSE_INDEX:Nifty 50']?.last_price ?? S.briefs.find((b) => b.date === date)?.nifty?.close)).join('')}</div>`;
+    h += `<div class="tape">${INDEX_KEYS.map((k) => { const qk = k.replace('|', ':'); const q = quotes[qk]; const chg = q?.net_change, pct = q && q.ohlc?.close ? (chg / q.ohlc.close) * 100 : null; return `<div class="t big ${chg > 0 ? 'pos' : chg < 0 ? 'neg' : ''}"><small>${NAMES[k]}</small><b class="num" data-qk="${esc(qk)}">${q ? fmtN(q.last_price, k.includes('VIX') ? 2 : 1) : '—'}</b><span class="c ${chg > 0 ? 'pos' : chg < 0 ? 'neg' : 'muted'}">${chg != null ? `${chg > 0 ? '+' : ''}${fmtN(chg, k.includes('VIX') ? 2 : 1)}${pct != null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''}` : ''}</span>${q?.ohlc ? `<span class="rng num">${fmtN(q.ohlc.low, 0)} – ${fmtN(q.ohlc.high, 0)}</span>` : ''}</div>`; }).join('')}</div>`;
+    if (!compact) { const brief = S.briefs.find((b) => b.date === date) || S.briefs[0]; if (brief && arr(brief.stocks).length) h += tickerStrip(brief.stocks); }
+    const niftySpot = quotes['NSE_INDEX:Nifty 50']?.last_price ?? S.briefs.find((b) => b.date === date)?.nifty?.close;
+    if (compact) {
+      if (plans.length) h += `<div class="plans-compact">${plans.map((p) => planLine(p, quotes, niftySpot)).join('')}</div><a class="btn small ghost mt" href="#/live">Open the live board →</a>`;
+      else h += `<p class="small muted mt">No trade plan for this session. <a href="#/live">Add one</a> or run <code>/brief</code>.</p>`;
+      box.innerHTML = h; return;
+    }
+    if (plans.length) h += `<div class="plans">${plans.map((p) => planRow(p, quotes, niftySpot)).join('')}</div>`;
     else h += `<p class="small muted mt">No trade plan for this session. Add one below or run <code>/brief</code>.</p>`;
     if (chain) {
       const rows = chain.filter((r) => r.call_options && r.put_options);
@@ -108,6 +156,7 @@ export function mount(box, ctx, { date = today(), compact = false } = {}) {
         <div class="span"><label>Only if (condition)</label><input name="condition" placeholder="Gap-up holds R1 for 15 minutes"></div>
         <div class="span form-acts"><button class="btn small" type="submit">Add plan</button></div></form></details>`;
     box.innerHTML = h;
+    flashChanges(box, prevVals);
     bind();
   };
 

@@ -14,6 +14,7 @@ import * as learn from './views/learn.js';
 import * as reviews from './views/reviews.js';
 import * as settingsView from './views/settings.js';
 import * as market from './views/market.js';
+import * as liveView from './views/live.js';
 import * as login from './views/login.js';
 
 const app = $('#app'), tabs = $('#tabs'), foot = $('#foot'), live = $('#live');
@@ -48,6 +49,7 @@ function route() {
     else if (a === 'diary') diary.list(ctx);
     else if (a === 'analytics') analytics.render(ctx);
     else if (a === 'market') market.render(ctx, b);
+    else if (a === 'live') liveView.render(ctx);
     else if (a === 'playbook' && b === 'new') playbook.form(ctx, null);
     else if (a === 'playbook' && b && c === 'edit') playbook.form(ctx, b);
     else if (a === 'playbook') playbook.list(ctx);

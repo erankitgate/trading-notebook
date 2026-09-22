@@ -41,27 +41,34 @@ try {
   check(/repeated mistake/.test(t), 'home: repeated mistake auto-detected');
   check(/Plan for next session/.test(t), 'home: plan for next session');
   check(/Loss budget used/.test(t) || /No page yet/.test(t), 'home: today strip');
-  check((await page.$$('.stat')).length >= 6, 'home: stat tiles');
   check(/Account balance/i.test(t) && /since/.test(t), 'home: account hero');
-  check(/Rules followed — last 30 days/.test(t) && (await page.$$('.rulelist li')).length === 4, 'home: rules compliance list');
-  check((await page.$$('[data-chart="bars"] path.bar.ok, [data-chart="bars"] path.bar.mid, [data-chart="bars"] path.bar.low')).length > 5, 'home: compliance bars');
+  check(/This month/.test(t) && (await page.$$('.mini-stats .kpi')).length === 4, 'home: compact month stats (full detail lives in Analytics)');
   check(/Market brief/.test(t) && /Pivot/.test(t), 'home: market teaser');
   check(/MANDATORY/.test(t) && (await page.$$('.big-checks li')).length >= 5, 'home: mandatory checklist gate renders');
-  check(/Balance progress/.test(t), 'home: prominent balance chart');
-  check(/Estimated P&L|Est\. P&L/i.test(t.replace(/&amp;/g,'&')) || /Est\. premium/.test(t), 'home: option payoff scenario table on live position');
   const upColor = await page.$eval(':root', () => getComputedStyle(document.documentElement).getPropertyValue('--up').trim());
   check(/00B386|00D9A3/i.test(upColor), `theme: Groww-style green accent applied (${upColor})`);
   // checklist gate actually blocks a new trade action
-  const cleared = await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('notebook.checklist.'))) || '[]'));
   await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('notebook.checklist.')) localStorage.removeItem(k); });
   await page.reload({ waitUntil: 'networkidle0' }); await page.waitForSelector('.gatebox');
   check(await page.$eval('.gatebox', (el) => el.textContent.includes('MANDATORY')), 'gate: shows locked when nothing ticked');
   await page.waitForFunction(() => document.querySelectorAll('.tape .t b').length === 3 && !/—/.test(document.querySelector('.tape .t b').textContent), { timeout: 8000 });
   check(true, 'home: live tape filled from the (demo) feed');
-  check((await page.$$('.plan-row')).length === 2 && /Unrealised/.test(await text()) && /IN TRADE/.test(await text()), 'home: live trade plans with unrealised P&L');
-  await page.click('.chip.accent[href="#/?r=1w"]');
-  await page.waitForFunction(() => document.querySelector('.chip.accent[href="#/?r=1w"]')?.getAttribute('aria-pressed') === 'true');
-  check(/Net P&L · 1 week/.test(await text()), 'home: range chips switch the stats');
+  check((await page.$$('.live-line')).length === 2 && /IN TRADE/.test(await text()), 'home: compact live-position lines (full board lives on #/live)');
+  check((await page.$$('.plan-row')).length === 0, 'home: no full payoff tables on the dashboard (moved to #/live)');
+  check((await page.$$('.section-link')).length === 7, 'home: links out to every section of the site');
+
+  t = await visit('#/live');
+  check(/^Live$/m.test(t) || /Live/.test(t), 'live: dedicated page renders');
+  check((await page.$$('.chip[href^="#/live?d="]')).length >= 1, 'live: date picker across sessions');
+  check((await page.$$('.plan-row')).length === 2 && /Unrealised/.test(t) && /IN TRADE/.test(t), 'live: full trade plans with unrealised P&L');
+  check(/Est\. premium|Est\. P&L/i.test(t.replace(/&amp;/g, '&')), 'live: option payoff scenario table on the open position');
+  check(await page.$eval('.ticker-wrap', (el) => el.textContent.length > 100), 'live: NSE-style scrolling ticker strip renders');
+  check((await page.$$('.tape .t.big')).length === 3, 'live: colourful index tape cards');
+
+  t = await visit('#/playbook');
+  check((await page.$$('.mini-stats .kpi')).length === 4, 'playbook: overview stats (active setups, net, best setup)');
+  check((await page.$$('.card .spark')).length >= 1, 'playbook: per-setup performance sparkline');
+  check(await page.$eval('.rulebook li', (el) => el.textContent.includes('%')), 'playbook: rule compliance % shown per rule');
 
   t = await visit('#/market');
   check(/Nifty 50/.test(t) && /Global cues/.test(t) && /All Nifty 50 stocks/.test(t), 'market: brief renders');
@@ -142,7 +149,7 @@ try {
   console.log('Mobile (360px):');
   await visit('#/'); // leave the dirty form before the viewport change reloads
   await page.setViewport({ width: 360, height: 740, isMobile: true, hasTouch: true });
-  for (const h of ['#/', '#/diary', '#/analytics', '#/market', '#/diary/new', '#/playbook', '#/settings']) {
+  for (const h of ['#/', '#/diary', '#/analytics', '#/market', '#/live', '#/diary/new', '#/playbook', '#/settings']) {
     await visit(h);
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check(over <= 1, `no horizontal overflow at 360px on ${h} (${over}px)`);
