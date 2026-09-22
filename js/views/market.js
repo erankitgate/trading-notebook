@@ -54,6 +54,23 @@ const TERMS = [
 
 const sentiBar = (se) => (se.positive == null ? '' : `<div class="senti"><div><div class="bar"><i class="p" style="width:${se.positive}%"></i><i class="n" style="width:${se.negative}%"></i></div><div class="lbl"><span class="pos">${se.positive}% positive</span><span class="neg">${se.negative}% negative</span></div>${se.why ? `<div class="small muted mt">${esc(se.why)}</div>` : ''}</div><div class="score"><span class="${se.score > 0 ? 'pos' : se.score < 0 ? 'neg' : ''}">${se.score > 0 ? '+' : ''}${se.score}</span><small>${esc(se.label || 'sentiment score −100…+100')}</small></div></div>`);
 
+/** TradingView's watchlist panel: dense rows, Last / Chg / Chg%, colour on the change only. */
+function watchlist(groups) {
+  const row = (x) => {
+    const up = (x.chg_1d ?? 0) > 0, dn = (x.chg_1d ?? 0) < 0;
+    const dec = Math.abs(x.close ?? 0) >= 1000 ? 0 : 2;
+    return `<tr><td class="wl-sym"><b>${esc(x.name || x.symbol)}</b></td>
+      <td class="r num">${fmtN(x.close, dec)}</td>
+      <td class="r num ${up ? 'pos' : dn ? 'neg' : 'muted'}">${x.chg_abs == null ? '' : `${x.chg_abs > 0 ? '+' : ''}${fmtN(x.chg_abs, dec)}`}</td>
+      <td class="r num ${up ? 'pos' : dn ? 'neg' : 'muted'}">${x.chg_1d == null ? '–' : `${up ? '+' : ''}${x.chg_1d.toFixed(2)}%`}</td>
+      <td class="r">${x.rsi == null ? '' : rsiTag(x.rsi)}</td>
+      <td>${trendTag(x.trend)}</td></tr>`;
+  };
+  return `<div class="watchlist"><div class="table-wrap"><table class="wl"><thead><tr><th>Symbol</th><th class="r">Last</th><th class="r">Chg</th><th class="r">Chg%</th><th class="r">RSI</th><th>Trend</th></tr></thead>
+    ${groups.filter((g) => g.items.length).map((g) => `<tbody><tr class="wl-head"><td colspan="6">${esc(g.title)}</td></tr>${g.items.map(row).join('')}</tbody>`).join('')}
+  </table></div></div>`;
+}
+
 /* ---------- TradingView-style technicals ---------- */
 const RATING_CLS = { 'Strong buy': 'sbuy', Buy: 'buy', Neutral: 'neut', Sell: 'sell', 'Strong sell': 'ssell' };
 const ratingChip = (label) => (label ? `<span class="rchip ${RATING_CLS[label] || 'neut'}">${esc(label)}</span>` : '');
@@ -142,7 +159,10 @@ export function render(ctx, date) {
 
   /* 1. sentiment + top news */
   h += sentiBar(se);
-  if (arr(b.news).length) h += `<div class="block"><h2>Top news, scored</h2><ul class="news">${arr(b.news).map((x) => `<li><span>${stag(x.score)}<div class="imp">${esc(x.impact || '')} impact</div></span><span><span class="t">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</span>${x.source ? ` <span class="muted small">· ${esc(x.source)}</span>` : ''}${x.note ? `<div class="n">${esc(x.note)}</div>` : ''}</span></li>`).join('')}</ul></div>`;
+  if (arr(b.news).length) h += `<div class="block"><div class="section-head"><h2>News, scored</h2><span class="small muted">${arr(b.news).length} stories</span></div>
+    <ul class="newsfeed">${arr(b.news).map((x) => `<li class="${(x.score ?? 0) > 0 ? 'good' : (x.score ?? 0) < 0 ? 'bad' : ''}">
+      <div class="nf-top"><span class="nf-title">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</span><span class="nf-src">${esc(x.source || '')}</span></div>
+      <div class="nf-bot">${stag(x.score)}${x.impact ? `<span class="nf-imp">${esc(x.impact)} impact</span>` : ''}${x.note ? `<span class="nf-note">${esc(x.note)}</span>` : ''}</div></li>`).join('')}</ul></div>`;
 
   /* 2. live */
   h += '<section class="block live-panel" id="livePanel" aria-label="Live market"></section>';
@@ -166,13 +186,22 @@ export function render(ctx, date) {
   /* 5. plan */
   if (arr(b.plan).length) h += `<div class="block"><h2>Plan for the session</h2><div class="plan next"><ol>${li(arr(b.plan))}</ol></div></div>`;
 
-  /* 6. globals */
-  if (arr(b.globals).length) {
-    h += `<div class="block"><div class="section-head"><h2>Global cues${tagFor('global')}</h2><span class="legend"><span><i class="pos"></i>up</span><span><i class="neg"></i>down</span></span></div>
-      ${barChart(arr(b.globals).map((g) => ({ label: g.name.replace(/\s*\(.*\)/, '').replace('US 10Y yield', 'US 10Y').replace('Dollar index', 'DXY'), value: g.chg_1d ?? 0, tip: `${g.name}: ${g.chg_1d > 0 ? '+' : ''}${g.chg_1d}% (${fmtN(g.close, g.close >= 1000 ? 0 : 2)})` })), { labelKey: 'label', height: 190, label: '1-day change', fmtValue: (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%` })}
-      <div class="ticker">${arr(b.globals).map(tick).join('')}</div>
-      <div class="table-wrap mt"><table><thead><tr><th>Market</th><th class="r">Last</th><th class="r">1d</th><th class="r">5d</th><th class="r">20d</th><th class="r">RSI</th><th>Trend</th><th>For India</th></tr></thead><tbody>
-      ${arr(b.globals).map((g) => `<tr><td>${esc(g.name)}</td><td class="r num">${fmtN(g.close, g.close >= 1000 ? 0 : 2)}</td><td class="r">${sgn(g.chg_1d)}</td><td class="r">${sgn(g.chg_5d)}</td><td class="r">${sgn(g.chg_20d)}</td><td class="r">${rsiTag(g.rsi)}</td><td>${trendTag(g.trend)}</td><td class="small">${indiaRead(g)}</td></tr>`).join('')}</tbody></table></div></div>`;
+  /* 6. watchlist + global cues */
+  const gl = arr(b.globals);
+  if (gl.length || arr(b.indices).length) {
+    const isIn = (re) => gl.filter((g) => re.test(g.name));
+    h += `<div class="block"><div class="section-head"><h2>Watchlist${tagFor('global')}</h2><span class="small muted">${b.as_of ? `as of ${niceDate(b.as_of)}` : ''}</span></div>
+      ${watchlist([
+        { title: 'India', items: [{ ...n, name: 'NIFTY' }, ...arr(b.indices).map((x) => ({ ...x, name: x.name.toUpperCase() }))] },
+        { title: 'Commodities', items: isIn(/Crude|Brent|Gold/) },
+        { title: 'Currencies & rates', items: isIn(/Dollar|USD\/INR|10Y/) },
+        { title: 'US', items: isIn(/S&P|Nasdaq|Dow|US VIX/) },
+        { title: 'Asia', items: isIn(/Nikkei|Hang Seng|Shanghai|Kospi|Straits/) },
+      ])}
+      <h3 class="mt">What each one means for India</h3>
+      <div class="table-wrap"><table class="wl"><tbody>
+      ${gl.map((g) => `<tr><td class="wl-sym"><b>${esc(g.name)}</b></td><td class="r num">${fmtN(g.close, g.close >= 1000 ? 0 : 2)}</td><td class="r">${sgn(g.chg_1d)}</td><td class="small">${indiaRead(g)}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
   }
 
   /* 6b. TradingView technicals */

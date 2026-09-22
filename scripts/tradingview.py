@@ -11,6 +11,17 @@ Usage: python3 scripts/tradingview.py [out.json]     (default: .tv.json, git-ign
 import json, sys, time, urllib.request, urllib.error, datetime as dt
 
 SCAN = "https://scanner.tradingview.com/india/scan"
+SCAN_GLOBAL = "https://scanner.tradingview.com/global/scan"
+
+# One source, one timestamp — every global cue comes from the same pull as the Indian data,
+# and each is the instrument a trader actually watches (NDX the Nasdaq 100, not the Composite).
+GLOBALS = [
+    ("NYMEX:CL1!", "Crude WTI ($)"), ("ICEEUR:BRN1!", "Brent ($)"), ("TVC:GOLD", "Gold ($)"),
+    ("TVC:DXY", "Dollar index"), ("FX_IDC:USDINR", "USD/INR"), ("TVC:US10Y", "US 10Y yield (%)"),
+    ("SP:SPX", "S&P 500"), ("NASDAQ:NDX", "Nasdaq 100"), ("DJ:DJI", "Dow"), ("CBOE:VIX", "US VIX"),
+    ("TVC:NI225", "Nikkei"), ("TVC:HSI", "Hang Seng"),
+]
+INDIAN_INDICES = [("NSE:NIFTY", "Nifty 50"), ("NSE:BANKNIFTY", "Bank Nifty"), ("NSE:INDIAVIX", "India VIX")]
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json", "Accept": "application/json"}
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -62,11 +73,11 @@ NIFTY50 = [
 PRETTY = {"BAJAJ_AUTO": "BAJAJ-AUTO", "M_M": "M&M", "TMPV": "TATAMOTORS PV", "TMCV": "TATAMOTORS CV"}
 
 
-def scan(tickers, columns):
+def scan(tickers, columns, url=SCAN):
     body = json.dumps({"symbols": {"tickers": tickers, "query": {"types": []}}, "columns": columns}).encode()
     for attempt in range(4):
         try:
-            with urllib.request.urlopen(urllib.request.Request(SCAN, data=body, headers=UA), timeout=30) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, data=body, headers=UA), timeout=30) as r:
                 return json.load(r).get("data", [])
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as e:
             if attempt == 3:
@@ -144,15 +155,39 @@ def constituents(index_close, index_chg_pct):
     return stocks
 
 
+def quotes(tickers_named, url=SCAN_GLOBAL):
+    """close / change / RSI / trend for a named list of tickers, all from one call."""
+    cols = ["close", "change", "change_abs", "RSI", "SMA20", "SMA50", "SMA200", "change|1W", "change|1M", "update_mode", "Recommend.All"]
+    rows = {r["s"]: dict(zip(cols, r["d"])) for r in scan([t for t, _ in tickers_named], cols, url)}
+    out = []
+    for ticker, name in tickers_named:
+        d = rows.get(ticker)
+        if not d:
+            continue
+        c, s20, s50 = d.get("close"), d.get("SMA20"), d.get("SMA50")
+        out.append({
+            "symbol": ticker, "name": name, "close": c, "chg_1d": d.get("change"), "chg_abs": d.get("change_abs"),
+            "chg_5d": d.get("change|1W"), "chg_20d": d.get("change|1M"),
+            "rsi": None if d.get("RSI") is None else round(d["RSI"], 1),
+            "sma20": s20, "sma50": s50, "sma200": d.get("SMA200"),
+            "dist_sma20_pct": round((c / s20 - 1) * 100, 2) if c and s20 else None,
+            "trend": "up" if (c and s20 and s50 and c > s20 > s50) else "down" if (c and s20 and s50 and c < s20 < s50) else "sideways",
+            "rating": rating(d.get("Recommend.All")), "live": d.get("update_mode"),
+        })
+    return out
+
+
 def main():
     out_path = sys.argv[1] if len(sys.argv) > 1 else ".tv.json"
     idx = index_technicals()
     stocks = constituents(idx["close"], idx["change_pct"])
+    globals_ = quotes(GLOBALS)
+    indices = quotes(INDIAN_INDICES, SCAN)
     ups = [s for s in stocks if (s["points"] or 0) > 0]
     downs = [s for s in stocks if (s["points"] or 0) < 0]
     out = {
         "source": "TradingView scanner", "fetched_at": dt.datetime.now(IST).isoformat(timespec="seconds"),
-        "index": idx, "stocks": stocks,
+        "index": idx, "stocks": stocks, "globals": globals_, "indices": indices,
         "contribution": {
             "points_up": round(sum(s["points"] for s in ups), 2), "points_down": round(sum(s["points"] for s in downs), 2),
             "net_points": round(sum(s["points"] or 0 for s in stocks), 2),
@@ -167,6 +202,7 @@ def main():
     print(f"  {len(stocks)} stocks · {out['contribution']['advances']} up / {out['contribution']['declines']} down · net {out['contribution']['net_points']:+.0f} pts")
     print("  pushing up:  " + ", ".join(f"{x['symbol']} {x['points']:+.1f}" for x in out["contribution"]["top_contributors"][:5]))
     print("  dragging:    " + ", ".join(f"{x['symbol']} {x['points']:+.1f}" for x in out["contribution"]["top_draggers"][:5]))
+    print(f"  globals: " + ", ".join(f"{g['name'].split(' (')[0]} {g['close']} ({g['chg_1d']:+.2f}%)" for g in globals_[:5]))
     print(f"  -> {out_path}")
 
 

@@ -556,3 +556,25 @@ table.pivots td .near { background: color-mix(in srgb, var(--accent) 28%, transp
 .contrib .pts { font-weight: 800; text-align: right; }
 .contrib .chg { text-align: right; font-size: .74rem; }
 @media (max-width: 560px) { .contrib li { grid-template-columns: 66px 1fr 46px 50px; } .contrib .wt { display: none; } }
+/* ---------- TradingView-style watchlist + news feed ---------- */
+.watchlist { margin-top: 10px; }
+table.wl { width: 100%; font-size: .88rem; border-collapse: collapse; }
+table.wl th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+table.wl td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
+table.wl tbody tr:hover td { background: var(--bg); }
+table.wl tr.wl-head td { background: var(--line-soft); font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 10px; border-bottom: 0; }
+.wl-sym b { font-weight: 700; }
+.newsfeed { list-style: none; margin: 10px 0 0; padding: 0; }
+.newsfeed li { padding: 10px 12px; border-left: 3px solid var(--line); border-bottom: 1px solid var(--line-soft); }
+.newsfeed li.good { border-left-color: var(--up); }
+.newsfeed li.bad { border-left-color: var(--down); }
+.newsfeed li:hover { background: var(--bg); }
+.nf-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.nf-title { font-weight: 700; font-size: .95rem; }
+.nf-title a { text-decoration: none; }
+.nf-title a:hover { text-decoration: underline; }
+.nf-src { color: var(--muted); font-size: .78rem; white-space: nowrap; flex: none; }
+.nf-bot { display: flex; gap: 8px; align-items: baseline; margin-top: 5px; flex-wrap: wrap; }
+.nf-imp { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+.nf-note { color: var(--muted); font-size: .86rem; flex: 1 1 280px; }
+@media (max-width: 560px) { .nf-top { flex-direction: column; gap: 2px; } }

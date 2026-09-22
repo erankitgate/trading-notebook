@@ -75,10 +75,10 @@ try {
   check((await page.$$('.stocks-table tbody tr')).length === 20, 'market: stocks table');
   check((await page.$$('#report h2')).length === 4 && (await page.$$('#report table.md')).length === 1, 'market: written report renders with sections and a table');
   check(/Call OI/.test(t) && /ATM straddle/.test(t), 'market: option-chain walls');
-  check(/42% positive/.test(t) && /Top news, scored/.test(t) && (await page.$$('.stag')).length >= 8, 'market: sentiment meter, scored news, section tags');
+  check(/42% positive/.test(t) && /News, scored/.test(t) && (await page.$$('.newsfeed li')).length >= 4 && (await page.$$('.stag')).length >= 8, 'market: sentiment meter, scored news feed, section tags');
   check((await page.$$('.chart-legend')).length === 1 && (await page.$$('.gauge svg')).length === 1 && (await page.$$('.ladder svg')).length === 1 && (await page.$$('.heat .cell')).length === 20, 'market: price chart, RSI gauge, ladder, heat tiles');
   check((await page.$eval('.ladder', (el) => el.textContent)).includes('now'), 'market: ladder marks the current price');
-  check(/Terms explained/.test(t) && /For India/.test(t), 'market: glossary and India read');
+  check(/Terms explained/.test(t) && /means for India/.test(t) && (await page.$$('table.wl tr.wl-head')).length >= 2, 'market: glossary, India read, watchlist groups');
   check(/Technicals/.test(t) && (await page.$$('.tv-gauge svg')).length === 3 && (await page.$$('table.ind')).length === 2, 'market: TradingView technicals — 3 rating gauges + oscillator/MA tables');
   check((await page.$$('table.pivots')).length === 2 && /Camarilla/.test(t) && /Fibonacci/.test(t), 'market: pivots in every method, monthly + daily');
   check(/What moved the index/.test(t) && (await page.$$('.contrib li')).length >= 10, 'market: index contribution ranking by weight × move');
