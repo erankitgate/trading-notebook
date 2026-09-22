@@ -18,6 +18,7 @@ The owner opens Claude Code in this folder every day. The project slash commands
 | `/learn <topic>` | Writes a full guide as an Artifact, then saves a `learning_notes` row linking to it |
 | `/review-week` | Pulls the week's numbers from the DB, drafts the weekly review, saves it to `reviews` |
 | `/brief` | Numbers from `scripts/market_brief.py` + `scripts/tradingview.py` + Upstox option chain, live news research (Reuters/Moneycontrol/CNBC), then a FULL written report (`market_briefs.report`, markdown) + plan + `trade_plans` rows for the session |
+| `/brief-data` | `python3 scripts/tradingview.py .tv.json` then `NOTEBOOK_PASSWORD=… python3 scripts/build_brief.py --date <session>` — builds the ENTIRE data half of a brief from one run |
 | `/tv` | Just the TradingView refresh: `python3 scripts/tradingview.py .tv.json` then `NOTEBOOK_PASSWORD=… python3 scripts/publish_tv.py --date <session>` — oscillators, MAs, ratings, pivots in 5 methods, and every stock's index weight + points contribution |
 | `/balance <₹>` | Records the day's account balance in `capital_log` (hero card + balance chart) |
 | `/deploy` | Runs checks + tests, commits, pushes, watches the Pages deploy until green |
@@ -88,6 +89,25 @@ tests/e2e/run.js      headless Chrome (puppeteer-core) walk of every route in de
 - `market_briefs.report` — the full written analysis (markdown; rendered by `md()` in dom.js); `oi` — option-chain summary `{weekly{expiry,pcr,max_call,max_put,call_walls,put_walls,straddle,expected_move}, monthly{…}}`.
 - `trade_plans` — per-session plans shown live: `date, instrument, instrument_key (Upstox), side, entry, stop, target, qty, condition, status (waiting|live|done|cancelled), fill, exit, note, sort`.
 - `diary_entries.rules_check` — `[{id, text, followed}]` snapshot of every rule for the day (`rules_broken` is the derived subset).
+
+## One source per number (learned the hard way)
+
+A brief must be built by **one run of `scripts/build_brief.py`**, never by stitching fetches from
+different times. A brief that mixed a Yahoo pull from Monday with a TradingView pull from Tuesday
+showed two different Nifty prices on the same page.
+
+- **Indian OHLC, option chains, position marks → Upstox.** Authoritative and live.
+- **Technicals, ratings, pivots, the 52 constituents, every global cue → TradingView scanner.**
+- Never Yahoo for globals: its `^IXIC` is the Nasdaq *Composite* while traders watch the Nasdaq *100*,
+  and its daily bars lag a session.
+- `date` = the session the brief is FOR; `as_of` = the data date. Daily pivots are computed in
+  `build_brief.py` from the last completed candle, so they are the levels for the coming session.
+- `build_brief.py` writes only the data fields. `report`, `summary`, `plan`, `sentiment`, `news`
+  are written by Claude and are never overwritten by a data refresh.
+
+### Two client gotchas that cost an hour
+- **Upstox 403s on urllib's default user-agent.** Always send `User-Agent: Mozilla/5.0`.
+- **Do not percent-encode the commas** separating instrument keys: `urllib.parse.quote(keys, safe=",")`.
 
 ## Live data (Upstox analytics token — read-only)
 
