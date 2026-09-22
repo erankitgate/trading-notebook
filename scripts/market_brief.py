@@ -118,14 +118,14 @@ def analyse(symbol, label, rows, meta):
     closes = [r[4] for r in rows]
     last = rows[-1]; prev = rows[-2] if len(rows) > 1 else last
     c = round(last[4], 2)
-    s20, s50, s200 = sma(closes, 20), sma(closes, 50), sma(closes, 200)
+    s10, s20, s50, s200 = sma(closes, 10), sma(closes, 20), sma(closes, 50), sma(closes, 200)
     r = rsi(closes)
     trend = "up" if s20 and s50 and c > s20 > s50 else "down" if s20 and s50 and c < s20 < s50 else "sideways"
     return {
         "symbol": symbol, "name": label, "date": dt.datetime.fromtimestamp(last[0], IST).strftime("%Y-%m-%d"),
         "close": c, "open": round(last[1], 2), "high": round(last[2], 2), "low": round(last[3], 2), "prev_close": round(prev[4], 2),
         "chg_1d": pct(c, prev[4]), "chg_5d": pct(c, closes[-6]) if len(closes) > 5 else None, "chg_20d": pct(c, closes[-21]) if len(closes) > 20 else None,
-        "rsi": r, "sma20": round(s20, 2) if s20 else None, "sma50": round(s50, 2) if s50 else None, "sma200": round(s200, 2) if s200 else None,
+        "rsi": r, "sma10": round(s10, 2) if s10 else None, "sma20": round(s20, 2) if s20 else None, "sma50": round(s50, 2) if s50 else None, "sma200": round(s200, 2) if s200 else None,
         "dist_sma20_pct": pct(c, s20), "atr": atr(rows), "trend": trend,
         "hi_52w": round(max(r_[2] for r_ in rows[-252:]), 2), "lo_52w": round(min(r_[3] for r_ in rows[-252:]), 2),
         "volume": last[5], "avg_volume_20": round(sum((r_[5] or 0) for r_ in rows[-20:]) / min(20, len(rows))),
@@ -137,13 +137,13 @@ def analyse_closes(symbol, label, pts, meta):
     """Same fields as analyse() from a close-only series (no OHLC, so no day range/ATR)."""
     closes = [c for _, c in pts]
     c = round(closes[-1], 2); prev = closes[-2] if len(closes) > 1 else c
-    s20, s50, s200 = sma(closes, 20), sma(closes, 50), sma(closes, 200)
+    s10, s20, s50, s200 = sma(closes, 10), sma(closes, 20), sma(closes, 50), sma(closes, 200)
     trend = "up" if s20 and s50 and c > s20 > s50 else "down" if s20 and s50 and c < s20 < s50 else "sideways"
     return {
         "symbol": symbol, "name": label, "date": dt.datetime.fromtimestamp(pts[-1][0], IST).strftime("%Y-%m-%d"),
         "close": c, "open": None, "high": None, "low": None, "prev_close": round(prev, 2),
         "chg_1d": pct(c, prev), "chg_5d": pct(c, closes[-6]) if len(closes) > 5 else None, "chg_20d": pct(c, closes[-21]) if len(closes) > 20 else None,
-        "rsi": rsi(closes), "sma20": round(s20, 2) if s20 else None, "sma50": round(s50, 2) if s50 else None, "sma200": round(s200, 2) if s200 else None,
+        "rsi": rsi(closes), "sma10": round(s10, 2) if s10 else None, "sma20": round(s20, 2) if s20 else None, "sma50": round(s50, 2) if s50 else None, "sma200": round(s200, 2) if s200 else None,
         "dist_sma20_pct": pct(c, s20), "atr": None, "trend": trend,
         "hi_52w": round(max(closes[-252:]), 2), "lo_52w": round(min(closes[-252:]), 2), "volume": None, "avg_volume_20": None,
         "currency": meta.get("currency"),
@@ -165,6 +165,8 @@ def main():
             rows, meta = fetch(sym); x = analyse(sym, label, rows, meta)
             if sym != "^INDIAVIX":
                 x["pivots"] = pivots(x)
+            # last ~130 sessions for charts: [date, o, h, l, c]
+            x["series"] = [[dt.datetime.fromtimestamp(r[0], IST).strftime("%Y-%m-%d"), round(r[1], 2), round(r[2], 2), round(r[3], 2), round(r[4], 2)] for r in rows[-130:]]
             out["indices"].append(x)
         except Exception as e:
             out["failed"].append(str(e))

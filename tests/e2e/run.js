@@ -46,6 +46,16 @@ try {
   check(/Rules followed — last 30 days/.test(t) && (await page.$$('.rulelist li')).length === 4, 'home: rules compliance list');
   check((await page.$$('[data-chart="bars"] path.bar.ok, [data-chart="bars"] path.bar.mid, [data-chart="bars"] path.bar.low')).length > 5, 'home: compliance bars');
   check(/Market brief/.test(t) && /Pivot/.test(t), 'home: market teaser');
+  check(/MANDATORY/.test(t) && (await page.$$('.big-checks li')).length >= 5, 'home: mandatory checklist gate renders');
+  check(/Balance progress/.test(t), 'home: prominent balance chart');
+  check(/Estimated P&L|Est\. P&L/i.test(t.replace(/&amp;/g,'&')) || /Est\. premium/.test(t), 'home: option payoff scenario table on live position');
+  const upColor = await page.$eval(':root', () => getComputedStyle(document.documentElement).getPropertyValue('--up').trim());
+  check(/00B386|00D9A3/i.test(upColor), `theme: Groww-style green accent applied (${upColor})`);
+  // checklist gate actually blocks a new trade action
+  const cleared = await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('notebook.checklist.'))) || '[]'));
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('notebook.checklist.')) localStorage.removeItem(k); });
+  await page.reload({ waitUntil: 'networkidle0' }); await page.waitForSelector('.gatebox');
+  check(await page.$eval('.gatebox', (el) => el.textContent.includes('MANDATORY')), 'gate: shows locked when nothing ticked');
   await page.waitForFunction(() => document.querySelectorAll('.tape .t b').length === 3 && !/—/.test(document.querySelector('.tape .t b').textContent), { timeout: 8000 });
   check(true, 'home: live tape filled from the (demo) feed');
   check((await page.$$('.plan-row')).length === 2 && /Unrealised/.test(await text()) && /IN TRADE/.test(await text()), 'home: live trade plans with unrealised P&L');
@@ -54,10 +64,14 @@ try {
   check(/Net P&L · 1 week/.test(await text()), 'home: range chips switch the stats');
 
   t = await visit('#/market');
-  check(/Nifty 50/.test(t) && /you are here/.test(t) && /Global cues/.test(t) && /All Nifty 50 stocks/.test(t), 'market: brief renders');
+  check(/Nifty 50/.test(t) && /Global cues/.test(t) && /All Nifty 50 stocks/.test(t), 'market: brief renders');
   check((await page.$$('.stocks-table tbody tr')).length === 20, 'market: stocks table');
   check((await page.$$('#report h2')).length === 4 && (await page.$$('#report table.md')).length === 1, 'market: written report renders with sections and a table');
-  check(/Call walls/.test(t) && /ATM straddle/.test(t), 'market: option-chain walls');
+  check(/Call OI/.test(t) && /ATM straddle/.test(t), 'market: option-chain walls');
+  check(/42% positive/.test(t) && /Top news, scored/.test(t) && (await page.$$('.stag')).length >= 8, 'market: sentiment meter, scored news, section tags');
+  check((await page.$$('.chart-legend')).length === 1 && (await page.$$('.gauge svg')).length === 1 && (await page.$$('.ladder svg')).length === 1 && (await page.$$('.heat .cell')).length === 20, 'market: price chart, RSI gauge, ladder, heat tiles');
+  check((await page.$eval('.ladder', (el) => el.textContent)).includes('now'), 'market: ladder marks the current price');
+  check(/Terms explained/.test(t) && /For India/.test(t), 'market: glossary and India read');
   await page.click('th.sort[data-k="rsi"]');
   await page.waitForFunction(() => location.hash.includes('s=rsi'));
   await page.waitForFunction(() => document.querySelector('th.sort[data-k="rsi"]')?.getAttribute('aria-sort') === 'descending');

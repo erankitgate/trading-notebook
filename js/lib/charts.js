@@ -146,3 +146,86 @@ export function bindCharts(root) {
     }
   }
 }
+
+/* ---------- market-brief visuals ---------- */
+const fmtK = (n) => (Math.abs(n) >= 1000 ? Math.round(n).toLocaleString('en-IN') : String(Math.round(n * 100) / 100));
+const smaAt = (arr, i, n) => (i + 1 >= n ? arr.slice(i + 1 - n, i + 1).reduce((s, v) => s + v, 0) / n : null);
+
+/** Close line + moving averages. series = [[date,o,h,l,c],…] ascending. */
+export function priceChart(series, { height = 240, mas = [10, 20, 50, 200], levels = [], label = 'Price' } = {}) {
+  if (!series || series.length < 5) return '<p class="sub small">No price history.</p>';
+  const closes = series.map((r) => r[4]);
+  const maLines = mas.map((n) => ({ n, pts: closes.map((_, i) => smaAt(closes, i, n)) }));
+  const shown = Math.min(series.length, 90), off = series.length - shown;
+  const pad = { l: 52, r: 14, t: 12, b: 26 };
+  const vals = [...closes.slice(off), ...maLines.flatMap((m) => m.pts.slice(off).filter((v) => v != null)), ...levels.map((l) => l.value)];
+  const { ticks, lo, hi } = niceTicks(Math.min(...vals), Math.max(...vals), 5);
+  const xOf = (i) => pad.l + ((i - off) * (W - pad.l - pad.r)) / (shown - 1);
+  const yOf = (v) => pad.t + ((hi - v) / (hi - lo)) * (height - pad.t - pad.b);
+  const path = (arr) => { let d = '', pen = false; arr.forEach((v, i) => { if (i < off || v == null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${xOf(i).toFixed(1)} ${yOf(v).toFixed(1)} `; pen = true; }); return d; };
+  const colors = { 10: 'var(--accent)', 20: 'var(--amber)', 50: 'var(--info)', 200: 'var(--down)' };
+  const pts = series.slice(off).map((r, k) => ({ x: +xOf(off + k).toFixed(1), y: +yOf(r[4]).toFixed(1), tip: `${niceDate(r[0])}: ${fmtK(r[4])}` }));
+  const last = closes[closes.length - 1];
+  return `<div class="chart" data-chart="line" data-points='${esc(JSON.stringify(pts))}'><svg viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}">
+    ${ticks.map((v) => `<line class="grid-line" x1="${pad.l}" x2="${W - pad.r}" y1="${yOf(v)}" y2="${yOf(v)}"/><text class="axis-text" x="${pad.l - 6}" y="${yOf(v) + 4}" text-anchor="end">${esc(fmtK(v))}</text>`).join('')}
+    ${levels.map((l) => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${yOf(l.value)}" y2="${yOf(l.value)}" stroke="${l.color || 'var(--muted)'}" stroke-width="1" stroke-dasharray="4 4" opacity=".8"/><text class="axis-text" x="${W - pad.r}" y="${yOf(l.value) - 3}" text-anchor="end">${esc(l.label)}</text>`).join('')}
+    ${maLines.map((m) => `<path d="${path(m.pts)}" fill="none" stroke="${colors[m.n] || 'var(--muted)'}" stroke-width="1.5" opacity=".9"/>`).join('')}
+    <path class="line" d="${path(closes)}"/>
+    <circle class="dot" r="4" cx="${xOf(series.length - 1)}" cy="${yOf(last)}"/>
+    <text class="axis-text" x="${xOf(series.length - 1) - 6}" y="${yOf(last) - 8}" text-anchor="end" font-weight="700">${esc(fmtK(last))}</text>
+    ${[off, off + Math.floor(shown / 2), series.length - 1].map((i, k) => `<text class="axis-text" x="${xOf(i)}" y="${height - pad.b + 16}" text-anchor="${k === 0 ? 'start' : k === 2 ? 'end' : 'middle'}">${esc(shortDate(series[i][0]))}</text>`).join('')}
+    <line class="cross" x1="0" x2="0" y1="${pad.t}" y2="${height - pad.b}" data-cross hidden/>
+    <rect class="hit" x="${pad.l}" y="${pad.t}" width="${W - pad.l - pad.r}" height="${height - pad.t - pad.b}" data-hit/>
+  </svg><div class="tip" data-tip hidden></div>
+  <div class="legend chart-legend"><span><i style="background:var(--ink)"></i>Close</span>${mas.map((n) => `<span><i style="background:${colors[n] || 'var(--muted)'}"></i>${n}-DMA</span>`).join('')}</div></div>`;
+}
+
+/** Semicircular gauge for a 0–100 value (RSI, sentiment %). zones = [[from,to,cls],…]. */
+export function gauge(value, { min = 0, max = 100, zones = [[0, 30, 'ok'], [30, 70, 'mid'], [70, 100, 'low']], label = '', sub = '' } = {}) {
+  const cx = 100, cy = 95, r = 80;
+  const ang = (v) => Math.PI - ((v - min) / (max - min)) * Math.PI;
+  const pt = (v, rad = r) => `${(cx + rad * Math.cos(ang(v))).toFixed(1)} ${(cy - rad * Math.sin(ang(v))).toFixed(1)}`;
+  const arc = (a, b) => `M${pt(a)} A${r} ${r} 0 ${b - a > (max - min) / 2 ? 1 : 0} 1 ${pt(b)}`;
+  const v = Math.max(min, Math.min(max, value ?? min));
+  return `<div class="gauge"><svg viewBox="0 0 200 110" role="img" aria-label="${esc(label)} ${v}">
+    ${zones.map(([a, b, c]) => `<path class="zone ${c}" d="${arc(a, b)}" fill="none" stroke-width="14" stroke-linecap="butt"/>`).join('')}
+    <line x1="${cx}" y1="${cy}" x2="${pt(v).split(' ')[0]}" y2="${pt(v).split(' ')[1]}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="5" fill="var(--ink)"/>
+    <text x="${cx}" y="${cy - 22}" text-anchor="middle" class="gauge-v">${value == null ? '–' : Math.round(value)}</text>
+    <text x="18" y="108" class="axis-text">${min}</text><text x="182" y="108" class="axis-text" text-anchor="end">${max}</text>
+  </svg><div class="gauge-l">${esc(label)}${sub ? `<span class="muted"> · ${esc(sub)}</span>` : ''}</div></div>`;
+}
+
+/** Vertical ladder of price levels with the current price marked. levels = [{label, value, kind:'r'|'s'|'p'|'ma'}]. */
+export function ladder(levels, price, { height = 300 } = {}) {
+  const vals = levels.map((l) => l.value).concat([price]);
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const pad = 16, y = (v) => pad + ((hi - v) / span) * (height - pad * 2);
+  const cls = { r: 'neg', s: 'pos', p: 'ink', ma: 'ma' };
+  return `<div class="ladder"><svg viewBox="0 0 320 ${height}" role="img" aria-label="Price levels">
+    <line x1="60" x2="60" y1="${pad}" y2="${height - pad}" stroke="var(--line)" stroke-width="2"/>
+    ${levels.map((l) => `<line x1="52" x2="68" y1="${y(l.value).toFixed(1)}" y2="${y(l.value).toFixed(1)}" class="lv-${cls[l.kind] || 'ink'}" stroke-width="2"/><text x="${l.kind === 'ma' ? 74 : 46}" y="${(y(l.value) + 4).toFixed(1)}" text-anchor="${l.kind === 'ma' ? 'start' : 'end'}" class="axis-text lv-${cls[l.kind] || 'ink'}">${esc(l.label)} ${esc(fmtK(l.value))}</text>`).join('')}
+    <polygon points="60,${y(price).toFixed(1)} 72,${(y(price) - 7).toFixed(1)} 72,${(y(price) + 7).toFixed(1)}" fill="var(--accent)"/>
+    <rect x="150" y="${(y(price) - 12).toFixed(1)}" width="150" height="24" rx="6" fill="var(--accent)"/><text x="225" y="${(y(price) + 5).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="12" font-weight="700" font-family="inherit">now ${esc(fmtK(price))}</text>
+  </svg></div>`;
+}
+
+/** Mirrored OI bars per strike: calls to the left (red), puts to the right (green). rows = [{strike, call, put}]. */
+export function oiBars(rows, { spot = null, height = null } = {}) {
+  if (!rows.length) return '';
+  const h = height || 18 * rows.length + 30, max = Math.max(...rows.flatMap((r) => [r.call, r.put]), 1);
+  const mid = 320, half = 250, rowH = 18;
+  return `<div class="chart" data-chart="bars"><svg viewBox="0 0 640 ${h}" role="img" aria-label="Open interest by strike">
+    <text class="axis-text" x="${mid - 8}" y="12" text-anchor="end">Call OI (resistance)</text><text class="axis-text" x="${mid + 8}" y="12">Put OI (support)</text>
+    ${rows.map((r, i) => { const y = 22 + i * rowH, cw = (r.call / max) * half, pw = (r.put / max) * half, isSpot = spot != null && Math.abs(r.strike - spot) < 25; return `
+      <rect x="${mid - cw}" y="${y}" width="${cw}" height="${rowH - 4}" rx="3" class="bar neg" opacity=".85"/><rect class="hit" x="${mid - half}" y="${y}" width="${half}" height="${rowH - 4}" data-tip-text="${esc(`${r.strike} CE: ${r.call}M OI`)}" data-tip-x="${mid - cw}" data-tip-y="${y}"/>
+      <rect x="${mid}" y="${y}" width="${pw}" height="${rowH - 4}" rx="3" class="bar pos" opacity=".85"/><rect class="hit" x="${mid}" y="${y}" width="${half}" height="${rowH - 4}" data-tip-text="${esc(`${r.strike} PE: ${r.put}M OI`)}" data-tip-x="${mid + pw}" data-tip-y="${y}"/>
+      <text x="${mid}" y="${y + 12}" text-anchor="middle" class="axis-text" font-weight="${isSpot ? 800 : 400}" fill="${isSpot ? 'var(--accent)' : 'var(--chart-ink)'}">${r.strike}</text>`; }).join('')}
+  </svg><div class="tip" data-tip hidden></div></div>`;
+}
+
+/** Heat tiles: items = [{label, value (%), sub}] coloured by sign and magnitude. */
+export function heatTiles(items, { max = 3 } = {}) {
+  const lvl = (v) => Math.min(4, Math.max(1, Math.ceil((Math.abs(v) / max) * 4)));
+  return `<div class="heat">${items.map((it) => `<a class="cell ${it.value > 0 ? `pos l${lvl(it.value)}` : it.value < 0 ? `neg l${lvl(it.value)}` : ''}" ${it.href ? `href="${esc(it.href)}"` : ''} title="${esc(it.tip || '')}"><b>${esc(it.label)}</b><span class="num">${it.value == null ? '–' : `${it.value > 0 ? '+' : ''}${Number(it.value).toFixed(1)}%`}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</a>`).join('')}</div>`;
+}

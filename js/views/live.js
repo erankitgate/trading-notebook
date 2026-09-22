@@ -5,6 +5,8 @@ import { esc, attr, toast, options } from '../lib/dom.js';
 import { money, cls, rmult, niceDate, today, num, round2 } from '../lib/fmt.js';
 import { explain } from '../api.js';
 import { S } from '../state.js';
+import { requireChecklist } from './checklistGate.js';
+import { payoffGrid, premiumAt } from '../lib/options.js';
 
 const INDEX_KEYS = ['NSE_INDEX|Nifty 50', 'NSE_INDEX|Nifty Bank', 'NSE_INDEX|India VIX'];
 const NAMES = { 'NSE_INDEX|Nifty 50': 'Nifty 50', 'NSE_INDEX|Nifty Bank': 'Bank Nifty', 'NSE_INDEX|India VIX': 'India VIX' };
@@ -30,22 +32,46 @@ function planPnl(p, ltp) {
   return { pnl, r: risk ? round2(pnl / risk) : null };
 }
 
-function planRow(p, quotes) {
-  const q = p.instrument_key ? quotes[p.instrument_key.replace('|', ':')] : null, ltp = q?.last_price ?? null;
+const daysUntil = (iso) => { if (!iso) return null; const d = new Date(`${iso}T15:30:00+05:30`); return Math.max(0, Math.ceil((d - new Date()) / 86400000)); };
+
+/** Payoff-scenario table for an option plan: P&L at Nifty spot offsets, using Black-Scholes with the plan's own IV. */
+function payoffTable(p, niftySpot) {
+  if (!p.option_type || !p.strike || niftySpot == null) return '';
+  const days = daysUntil(p.expiry);
+  const offsets = [-200, -100, -50, 0, 50, 100, 200];
+  const grid = payoffGrid(p, niftySpot, days ?? 14, p.iv ?? 15, offsets);
+  const premiumNow = grid.find((g) => g.offset === 0);
+  return `<div class="payoff mt"><div class="small muted">If Nifty opens from here (spot ${fmtN(niftySpot, 0)}, ${days ?? '?'} days to ${p.expiry ? niceDate(p.expiry, { day: 'numeric', month: 'short' }) : 'expiry'}, IV ${p.iv ?? 15}% assumed — <b>estimated with Black-Scholes, not your broker's live premium</b>. Tell me the real LTP/IV any time and I'll recalibrate this exactly.</div>
+    <div class="table-wrap mt"><table class="payoff-t"><thead><tr><th>Nifty opens</th>${grid.map((g) => `<th class="r ${g.offset === 0 ? 'now' : ''}">${g.offset === 0 ? 'now' : `${g.offset > 0 ? '+' : ''}${g.offset}`}</th>`).join('')}</tr></thead>
+    <tbody><tr><td>Spot</td>${grid.map((g) => `<td class="r num ${g.offset === 0 ? 'now' : ''}">${fmtN(g.spot, 0)}</td>`).join('')}</tr>
+    <tr><td>Est. premium</td>${grid.map((g) => `<td class="r num ${g.offset === 0 ? 'now' : ''}">${fmtN(g.premium)}</td>`).join('')}</tr>
+    <tr><td>Est. P&amp;L</td>${grid.map((g) => `<td class="r num ${cls(g.pnl)} ${g.offset === 0 ? 'now' : ''}">${money(g.pnl, { compact: true })}</td>`).join('')}</tr></tbody></table></div>
+    ${premiumNow ? `<div class="small muted mt">At the current spot, this position is roughly ${cls(premiumNow.pnl) === 'pos' ? 'up' : 'down'} <b class="${cls(premiumNow.pnl)}">${money(premiumNow.pnl)}</b> — an estimate; check the LTP above for the real mark.</div>` : ''}</div>`;
+}
+
+function planRow(p, quotes, niftySpot) {
+  const isOption = !!(p.option_type && p.strike);
+  // For an option plan, "LTP" is an estimate from Black-Scholes off the live underlying — the app has no
+  // per-contract options feed. For an index/stock plan the instrument_key quote IS the tradable instrument.
+  const q = !isOption && p.instrument_key ? quotes[p.instrument_key.replace('|', ':')] : null;
+  const estPremium = isOption && niftySpot != null ? premiumAt(p, niftySpot, daysUntil(p.expiry) ?? 14, p.iv ?? 15) : null;
+  const ltp = isOption ? (estPremium != null ? round2(estPremium) : null) : (q?.last_price ?? null);
   const pl = planPnl(p, ltp);
   const ref = p.status === 'live' ? p.fill : p.entry;
   const toStop = p.stop != null && ltp != null ? ltp - p.stop : null, toTarget = p.target != null && ltp != null ? p.target - ltp : null;
   const hit = ltp != null && p.status === 'live' && p.stop != null && (p.side === 'Sell' ? ltp >= p.stop : ltp <= p.stop);
   const tgt = ltp != null && p.status === 'live' && p.target != null && (p.side === 'Sell' ? ltp <= p.target : ltp >= p.target);
   const near = ltp != null && p.status === 'waiting' && p.entry != null && Math.abs(dist(p.entry, ltp)) <= 0.25;
-  return `<div class="plan-row st-${p.status} ${hit ? 'hit' : tgt ? 'tgt' : near ? 'near' : ''}" data-plan="${attr(p.id)}">
-    <div class="head"><b>${esc(p.instrument)}</b> <span class="tag ${p.side === 'Sell' ? 'bad' : 'good'}">${esc(p.side)}</span> <span class="tag">${p.status === 'live' ? 'IN TRADE' : p.status === 'done' ? 'closed' : 'waiting'}</span>${p.qty ? `<span class="muted small"> · qty ${p.qty}</span>` : ''}</div>
-    <div class="lv"><span><small>LTP</small><b class="num">${ltp != null ? fmtN(ltp) : '—'}</b>${q?.net_change != null ? `<i class="${cls(q.net_change)}">${q.net_change > 0 ? '+' : ''}${fmtN(q.net_change)}</i>` : ''}</span>
+  return `<div class="plan-row st-${p.status} ${hit ? 'hit' : tgt ? 'tgt' : near ? 'near' : ''}" data-plan="${attr(p.id)}" data-date="${attr(p.date)}">
+    <div class="head"><b>${esc(p.instrument)}</b> <span class="tag ${p.side === 'Sell' ? 'bad' : 'good'}">${esc(p.side)}</span> <span class="tag">${p.status === 'live' ? 'IN TRADE' : p.status === 'done' ? 'closed' : 'waiting'}</span>${p.qty ? `<span class="muted small"> · qty ${p.qty}</span>` : ''}${isOption ? '<span class="tag warn">est. premium</span>' : ''}</div>
+    <div class="lv"><span><small>${isOption ? 'Est. LTP' : 'LTP'}</small><b class="num">${ltp != null ? fmtN(ltp) : '—'}</b>${q?.net_change != null ? `<i class="${cls(q.net_change)}">${q.net_change > 0 ? '+' : ''}${fmtN(q.net_change)}</i>` : ''}${isOption && niftySpot != null ? `<i class="muted">Nifty ${fmtN(niftySpot, 0)}</i>` : ''}</span>
       <span><small>${p.status === 'live' ? 'Fill' : 'Entry'}</small><b class="num">${ref != null ? fmtN(ref) : '—'}</b>${ltp != null && ref != null && p.status === 'waiting' ? `<i class="muted">${dist(ref, ltp) > 0 ? '+' : ''}${dist(ref, ltp).toFixed(2)}% away</i>` : ''}</span>
       <span><small>Stop</small><b class="num neg">${p.stop != null ? fmtN(p.stop) : '—'}</b>${toStop != null ? `<i class="${hit ? 'neg' : 'muted'}">${hit ? 'STOP HIT' : `${fmtN(Math.abs(toStop), 0)} away`}</i>` : ''}</span>
       <span><small>Target</small><b class="num pos">${p.target != null ? fmtN(p.target) : '—'}</b>${toTarget != null ? `<i class="${tgt ? 'pos' : 'muted'}">${tgt ? 'TARGET HIT' : `${fmtN(Math.abs(toTarget), 0)} away`}</i>` : ''}</span>
       ${pl ? `<span><small>Unrealised</small><b class="num ${cls(pl.pnl)}">${money(pl.pnl)}</b><i class="${pl.r == null ? '' : cls(pl.r)}">${rmult(pl.r)}</i></span>` : ''}</div>
     ${p.condition ? `<div class="small muted">Only if: ${esc(p.condition)}</div>` : ''}${p.note ? `<div class="small muted">${esc(p.note)}</div>` : ''}
+    ${p.status === 'live' && !p.stop ? '<div class="small neg" style="font-weight:700">⚠ No stop is set on this position.</div>' : ''}
+    ${p.status === 'live' ? payoffTable(p, niftySpot) : ''}
     <div class="acts">${p.status === 'waiting' ? `<button type="button" class="btn small" data-act="live">Mark in trade</button>` : ''}${p.status === 'live' ? `<button type="button" class="btn small" data-act="done">Close</button>` : ''}${p.status !== 'done' ? `<button type="button" class="btn small ghost" data-act="cancel">Cancel</button>` : ''}</div></div>`;
 }
 
@@ -59,14 +85,20 @@ export function mount(box, ctx, { date = today(), compact = false } = {}) {
     const open = marketOpen();
     let h = `<div class="section-head"><h2>Live · ${niceDate(date, { weekday: 'short', day: 'numeric', month: 'short' })}</h2><span class="live ${err ? 'off' : open ? 'on' : ''}"><i></i><span>${err ? esc(err) : open ? 'NSE open' : 'Market closed'}${lastAt ? ` · ${lastAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}</span></span></div>`;
     h += `<div class="tape">${INDEX_KEYS.map((k) => { const q = quotes[k.replace('|', ':')]; const chg = q?.net_change, pct = q && q.ohlc?.close ? (chg / q.ohlc.close) * 100 : null; return `<div class="t ${chg > 0 ? 'pos' : chg < 0 ? 'neg' : ''}"><small>${NAMES[k]}</small><b class="num">${q ? fmtN(q.last_price, k.includes('VIX') ? 2 : 1) : '—'}</b><span class="c ${chg > 0 ? 'pos' : chg < 0 ? 'neg' : 'muted'}">${chg != null ? `${chg > 0 ? '+' : ''}${fmtN(chg, k.includes('VIX') ? 2 : 1)}${pct != null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)` : ''}` : ''}</span>${q?.ohlc ? `<span class="rng num">${fmtN(q.ohlc.low, 0)} – ${fmtN(q.ohlc.high, 0)}</span>` : ''}</div>`; }).join('')}</div>`;
-    if (plans.length) h += `<div class="plans">${plans.map((p) => planRow(p, quotes)).join('')}</div>`;
+    if (plans.length) h += `<div class="plans">${plans.map((p) => planRow(p, quotes, quotes['NSE_INDEX:Nifty 50']?.last_price ?? S.briefs.find((b) => b.date === date)?.nifty?.close)).join('')}</div>`;
     else h += `<p class="small muted mt">No trade plan for this session. Add one below or run <code>/brief</code>.</p>`;
     if (chain) {
       const rows = chain.filter((r) => r.call_options && r.put_options);
       const tc = rows.reduce((s, r) => s + (r.call_options.market_data.oi || 0), 0), tp = rows.reduce((s, r) => s + (r.put_options.market_data.oi || 0), 0);
       const mc = rows.reduce((a, r) => (r.call_options.market_data.oi > (a?.call_options.market_data.oi || 0) ? r : a), null), mp = rows.reduce((a, r) => (r.put_options.market_data.oi > (a?.put_options.market_data.oi || 0) ? r : a), null);
       const spot = quotes['NSE_INDEX:Nifty 50']?.last_price, atm = spot ? rows.reduce((a, r) => (Math.abs(r.strike_price - spot) < Math.abs((a?.strike_price ?? 1e9) - spot) ? r : a), null) : null;
-      h += `<div class="mini mt"><span>Chain ${esc(chain.expiry || '')}</span><span>PCR <b>${tc ? (tp / tc).toFixed(2) : '–'}</b></span><span>Call wall <b class="num">${mc ? fmtN(mc.strike_price, 0) : '–'}</b></span><span>Put wall <b class="num">${mp ? fmtN(mp.strike_price, 0) : '–'}</b></span>${atm ? `<span>ATM ${fmtN(atm.strike_price, 0)} straddle <b class="num">${fmtN((atm.call_options.market_data.ltp || 0) + (atm.put_options.market_data.ltp || 0), 1)}</b></span>` : ''}</div>`;
+      h += `<div class="mini mt"><span>Live chain ${esc(chain.expiry || '')}</span><span>PCR <b>${tc ? (tp / tc).toFixed(2) : '–'}</b></span><span>Call wall (resistance) <b class="num neg">${mc ? fmtN(mc.strike_price, 0) : '–'}</b></span><span>Put wall (support) <b class="num pos">${mp ? fmtN(mp.strike_price, 0) : '–'}</b></span>${atm ? `<span>ATM ${fmtN(atm.strike_price, 0)} straddle <b class="num">${fmtN((atm.call_options.market_data.ltp || 0) + (atm.put_options.market_data.ltp || 0), 1)}</b></span>` : ''}</div>`;
+    } else {
+      const brief = S.briefs.find((b) => b.date === date) || S.briefs[0], oi = brief?.oi;
+      if (oi?.weekly || oi?.monthly) {
+        const c = (o, label) => o ? `<span>${label} PCR <b>${o.pcr}</b></span><span>call wall <b class="num neg">${fmtN(o.max_call, 0)}</b></span><span>put wall <b class="num pos">${fmtN(o.max_put, 0)}</b></span>${o.straddle ? `<span>straddle <b class="num">${o.straddle}</b> (±${o.expected_move})</span>` : ''}` : '';
+        h += `<div class="mini mt">${c(oi.monthly, 'Monthly')}</div><p class="small muted">From this session's brief (not live) — <a href="#/market/${esc(brief.date)}">see the full option chain</a>.</p>`;
+      }
     }
     if (!compact) h += `<details class="mt"><summary class="small muted">Add a plan for this session</summary><form id="planForm" class="grid mt">
         <div class="span"><label>Instrument</label><input name="instrument" placeholder="NIFTY spot / NIFTY 29 SEP 23500 CE" required></div>
@@ -84,7 +116,7 @@ export function mount(box, ctx, { date = today(), compact = false } = {}) {
       const row = b.closest('[data-plan]'), p = S.plans.find((x) => x.id === row.dataset.plan); if (!p) return;
       const act = b.dataset.act;
       let patch = null;
-      if (act === 'live') { const fill = num(prompt(`Fill price for ${p.instrument}?`, p.entry ?? '')); if (fill == null) return; patch = { status: 'live', fill }; }
+      if (act === 'live') { if (row.dataset.date === today() && !requireChecklist(today())) return; const fill = num(prompt(`Fill price for ${p.instrument}?`, p.entry ?? '')); if (fill == null) return; patch = { status: 'live', fill }; }
       if (act === 'done') { const exit = num(prompt(`Exit price for ${p.instrument}?`, '')); if (exit == null) return; patch = { status: 'done', exit }; }
       if (act === 'cancel') { if (!confirm('Cancel this plan?')) return; patch = { status: 'cancelled' }; }
       try { await ctx.api.update('trade_plans', p.id, patch); toast('Plan updated'); await ctx.reload(); } catch (e) { toast(explain(e), 'bad'); }
@@ -92,6 +124,7 @@ export function mount(box, ctx, { date = today(), compact = false } = {}) {
     const f = box.querySelector('#planForm');
     if (f) f.onsubmit = async (ev) => {
       ev.preventDefault();
+      if (date === today() && !requireChecklist(date)) return;
       const row = { date, instrument: f.instrument.value.trim(), instrument_key: f.instrument_key.value.trim() || null, side: f.side.value, entry: num(f.entry.value), stop: num(f.stop.value), target: num(f.target.value), qty: num(f.qty.value), condition: f.condition.value.trim() || null, sort: plans.length + 1 };
       if (!row.instrument) return;
       try { await ctx.api.insert('trade_plans', row); toast('Plan added'); await ctx.reload(); } catch (e) { toast(explain(e), 'bad'); }

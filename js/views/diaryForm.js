@@ -5,6 +5,7 @@ import { money, niceDate, today, arr, key, num, lines, round2, rmult, cls } from
 import { autoPnl, tradeRisk, tradeR, tradeRR, suggestQty, riskBudget, mistakeCounts } from '../lib/stats.js';
 import { explain } from '../api.js';
 import { S, settings, entryByDate } from '../state.js';
+import { checklistCleared } from './checklistGate.js';
 
 const BIAS = ['', 'bullish', 'bearish', 'neutral'];
 
@@ -137,6 +138,10 @@ export function render(ctx, date, isNew) {
   form.onsubmit = (ev) => {
     ev.preventDefault(); err.textContent = '';
     if (!form.date.value) { err.textContent = 'Pick a date.'; form.date.focus(); return; }
+    if (isNew && form.date.value === today() && !checklistCleared(today())) {
+      const hasTrade = [...tBox.querySelectorAll('.trade [name=instrument]')].some((i) => i.value.trim());
+      if (hasTrade) { err.textContent = 'Complete the mandatory pre-trade checklist on the front page before logging a trade for today.'; return; }
+    }
     const trades = [...tBox.querySelectorAll('.trade')].map((row) => {
       const g = readRow(row, ['instrument', 'side', 'setup', 'qty', 'entry', 'stop', 'target', 'exit', 'pnl', 'time_in', 'time_out', 'reason', 'result']);
       const t = { instrument: g.instrument, side: g.side, setup: g.setup || null, qty: num(g.qty), entry: num(g.entry), stop: num(g.stop), target: num(g.target), exit: num(g.exit), pnl: num(g.pnl), time_in: g.time_in || null, time_out: g.time_out || null, reason: g.reason, result: g.result };

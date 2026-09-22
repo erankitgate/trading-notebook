@@ -3,12 +3,14 @@
 import { esc, toast, busy } from '../lib/dom.js';
 import { money, cls, pct, rmult, niceDate, today, plural, num, arr } from '../lib/fmt.js';
 import { summary, filterRange, equityCurve, dayNet, dayTrades, dayLimits, accountSummary, complianceSeries, perRuleCompliance, RANGES, ruleCompliance } from '../lib/stats.js';
-import { sparkline, barChart, bindCharts, PCT_DOMAIN } from '../lib/charts.js';
+import { sparkline, barChart, lineChart, bindCharts, PCT_DOMAIN } from '../lib/charts.js';
 import { explain } from '../api.js';
 import { S, settings, entryByDate, activeRules } from '../state.js';
+import { dayGross, dayCharges } from '../lib/stats.js';
 import { diaryList, flagsHtml, bindFlags, planHtml, alertsHtml } from './shared.js';
 import { briefTeaser } from './market.js';
 import * as live from './live.js';
+import * as gate from './checklistGate.js';
 
 const fmtPF = (pf) => (pf == null ? '–' : pf === Infinity ? '∞' : pf.toFixed(2));
 const tile = (label, value, detail = '', tone = '') => `<div class="stat ${tone}"><small>${label}</small><b>${value}</b>${detail ? `<span class="d">${detail}</span>` : ''}</div>`;
@@ -27,7 +29,8 @@ export function render(ctx) {
   const latest = S.diary[0];
 
   let h = `<div class="head-row"><div><h1>My Trading Notebook</h1><p class="sub">Every trade, every rule, every lesson — one page per day.</p></div>
-    <a class="btn" href="${todayEntry ? `#/diary/${t}` : '#/diary/new'}">${todayEntry ? "Open today's page" : "+ Log today's trades"}</a></div>`;
+    <a class="btn" id="logTradeBtn" href="${todayEntry ? `#/diary/${t}` : '#/diary/new'}">${todayEntry ? "Open today's page" : "+ Log today's trades"}</a></div>`;
+  h += '<div id="gateBox"></div>';
 
   /* account hero */
   const bal = acct.balance, since = acct.startDate ? niceDate(acct.startDate, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
@@ -44,6 +47,12 @@ export function render(ctx) {
     </div></section>`;
 
   h += '<section class="block live-panel" id="livePanel" aria-label="Live market"></section>';
+  /* prominent balance progress chart */
+  if (acct.series.length > 1) {
+    h += `<div class="balance-card"><div class="section-head"><h2>Balance progress</h2><span class="${cls(acct.net || 0)}">${acct.net != null ? `${money(acct.net)} (${pct(acct.returnPct, 2)})` : ''} since ${since || 'start'}</span></div>
+      ${lineChart(acct.series.map((p) => ({ date: p.date, balance: p.balance, tip: `${niceDate(p.date)}: ${money(p.balance, { sign: false })}${p.reported ? ' (reported)' : ''}` })), { valueKey: 'balance', label: 'Account balance', zero: false, fmtValue: (v, o) => money(v, { sign: false, ...(o || {}) }) })}</div>`;
+  }
+
   h += flagsHtml();
 
   /* today strip */
@@ -87,8 +96,15 @@ export function render(ctx) {
   } else h += '<p class="small"><a href="#/playbook">Add your rules in the Playbook</a> to start tracking them.</p>';
   h += '</div>';
 
-  /* market teaser */
+  /* market teaser: tomorrow/today's analysis */
   if (S.briefs.length) h += `<div class="block">${briefTeaser(S.briefs[0])}</div>`;
+
+  /* yesterday recap */
+  const prevDay = S.diary.find((e) => e.date < t);
+  if (prevDay) { const gross = dayGross(prevDay), ch = dayCharges(prevDay), net = dayNet(prevDay); h += `<div class="block"><div class="section-head"><h2>Yesterday's recap — ${niceDate(prevDay.date, { weekday: 'short', day: 'numeric', month: 'short' })}</h2><span class="big ${cls(net)}">${money(net)}</span></div>
+    ${prevDay.title ? `<p class="sub small">${esc(prevDay.title)}</p>` : ''}
+    <div class="mini">${ch ? `<span>gross <b class="num">${money(gross)}</b></span>` : ''}<span>${plural(dayTrades(prevDay).length, 'trade')}</span><span>${plural(arr(prevDay.mistakes).length, 'mistake')}</span><span>${plural(arr(prevDay.rules_broken).length, 'rule')} broken</span></div>
+    <a class="btn small ghost mt" href="#/diary/${esc(prevDay.date)}">Open that day</a></div>`; }
 
   /* plan for next session */
   if (latest && (arr(latest.next_day_strategy).length || arr(latest.watchlist).length)) h += `<div class="block"><h2>Plan for next session</h2>${planHtml(latest)}</div>`;
@@ -107,9 +123,11 @@ export function render(ctx) {
   else h += '<div class="block empty-box"><strong>Your notebook is empty.</strong> Start with <a href="#/settings">Settings</a>, add your <a href="#/playbook">rules and setups</a>, then log your first day.</div>';
 
   ctx.app.innerHTML = h;
+  gate.mount(ctx.app.querySelector('#gateBox'), t);
   bindFlags(ctx.app, ctx);
   bindCharts(ctx.app);
   live.mount(ctx.app.querySelector('#livePanel'), ctx, { date: S.briefs[0] && S.briefs[0].date >= t ? S.briefs[0].date : t, compact: true });
+  if (!todayEntry) { const btn = ctx.app.querySelector('#logTradeBtn'); btn.onclick = (ev) => { if (!gate.requireChecklist(t)) ev.preventDefault(); }; }
   const bf = ctx.app.querySelector('#balForm');
   bf.onsubmit = (ev) => {
     ev.preventDefault();
