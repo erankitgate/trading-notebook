@@ -54,6 +54,60 @@ const TERMS = [
 
 const sentiBar = (se) => (se.positive == null ? '' : `<div class="senti"><div><div class="bar"><i class="p" style="width:${se.positive}%"></i><i class="n" style="width:${se.negative}%"></i></div><div class="lbl"><span class="pos">${se.positive}% positive</span><span class="neg">${se.negative}% negative</span></div>${se.why ? `<div class="small muted mt">${esc(se.why)}</div>` : ''}</div><div class="score"><span class="${se.score > 0 ? 'pos' : se.score < 0 ? 'neg' : ''}">${se.score > 0 ? '+' : ''}${se.score}</span><small>${esc(se.label || 'sentiment score −100…+100')}</small></div></div>`);
 
+/* ---------- TradingView-style technicals ---------- */
+const RATING_CLS = { 'Strong buy': 'sbuy', Buy: 'buy', Neutral: 'neut', Sell: 'sell', 'Strong sell': 'ssell' };
+const ratingChip = (label) => (label ? `<span class="rchip ${RATING_CLS[label] || 'neut'}">${esc(label)}</span>` : '');
+
+/** Half-circle needle gauge from -1..+1, the way TradingView shows Strong Sell → Strong Buy. */
+function ratingGauge(value, label, caption) {
+  const v = Math.max(-1, Math.min(1, value ?? 0));
+  const cx = 110, cy = 100, r = 78;
+  const ang = (t) => Math.PI - ((t + 1) / 2) * Math.PI; // -1 → left, +1 → right
+  const pt = (t, rad = r) => `${(cx + rad * Math.cos(ang(t))).toFixed(1)} ${(cy - rad * Math.sin(ang(t))).toFixed(1)}`;
+  const arc = (a, b, cls) => `<path class="gz ${cls}" d="M${pt(a)} A${r} ${r} 0 0 1 ${pt(b)}" fill="none" stroke-width="16"/>`;
+  return `<div class="tv-gauge"><svg viewBox="0 0 220 118" role="img" aria-label="${esc(label || '')}">
+    ${arc(-1, -0.6, 'ssell')}${arc(-0.58, -0.2, 'sell')}${arc(-0.18, 0.18, 'neut')}${arc(0.2, 0.58, 'buy')}${arc(0.6, 1, 'sbuy')}
+    <line x1="${cx}" y1="${cy}" x2="${pt(v, r - 14).split(' ')[0]}" y2="${pt(v, r - 14).split(' ')[1]}" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="6" fill="var(--ink)"/>
+    <text x="${cx}" y="${cy - 26}" text-anchor="middle" class="gv ${RATING_CLS[label] || 'neut'}">${esc(label || '–')}</text>
+  </svg>${caption ? `<div class="small muted">${esc(caption)}</div>` : ''}</div>`;
+}
+
+const indTable = (rows, title) => `<div class="kpi"><small>${title}</small><div class="table-wrap"><table class="ind"><thead><tr><th>Name</th><th class="r">Value</th><th class="r">Action</th></tr></thead><tbody>
+  ${rows.map((x) => `<tr><td>${esc(x.name)}</td><td class="r num">${x.value == null ? '–' : fmtN(x.value)}</td><td class="r">${ratingChip(x.action)}</td></tr>`).join('')}</tbody></table></div></div>`;
+
+/** Pivots across all five methods, the way TradingView's Pivots panel lays them out. */
+function pivotTable(pivots, spot) {
+  const methods = Object.keys(pivots || {});
+  if (!methods.length) return '';
+  const rowName = { R3: 'R3', R2: 'R2', R1: 'R1', Middle: 'P', S1: 'S1', S2: 'S2', S3: 'S3' };
+  const order = ['R3', 'R2', 'R1', 'Middle', 'S1', 'S2', 'S3'];
+  return `<div class="table-wrap"><table class="pivots"><thead><tr><th>Pivot</th>${methods.map((m) => `<th class="r">${esc(m)}</th>`).join('')}</tr></thead><tbody>
+    ${order.map((lvl) => `<tr class="${lvl.startsWith('R') ? 'res' : lvl.startsWith('S') ? 'sup' : 'piv'}"><td><b>${rowName[lvl]}</b></td>${methods.map((m) => {
+      const v = pivots[m]?.[lvl];
+      const near = v != null && spot != null && Math.abs(v - spot) / spot < 0.0035;
+      return `<td class="r num">${v == null ? '–' : `<span class="${near ? 'near' : ''}">${fmtN(v, 0)}</span>`}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+/** Which stocks actually moved the index, in points. */
+function contributionBlock(c, stocks) {
+  if (!c || c.net_points == null) return '';
+  const all = [...arr(stocks)].filter((s) => s.points != null).sort((a, b) => b.points - a.points);
+  const max = Math.max(...all.map((s) => Math.abs(s.points)), 0.01);
+  const bar = (s) => `<li><span class="sym">${esc(s.symbol)}</span><span class="wt muted">${s.weight_pct != null ? `${s.weight_pct.toFixed(2)}%` : ''}</span>
+    <span class="track"><i class="${s.points >= 0 ? 'up' : 'dn'}" style="width:${Math.round((Math.abs(s.points) / max) * 100)}%"></i></span>
+    <span class="pts num ${s.points >= 0 ? 'pos' : 'neg'}">${s.points >= 0 ? '+' : ''}${s.points.toFixed(1)}</span>
+    <span class="chg num ${s.chg_1d >= 0 ? 'pos' : 'neg'}">${s.chg_1d >= 0 ? '+' : ''}${(s.chg_1d ?? 0).toFixed(2)}%</span></li>`;
+  const up = all.filter((s) => s.points > 0).slice(0, 10), down = all.filter((s) => s.points < 0).slice(-10).reverse();
+  return `<div class="block"><div class="section-head"><h2>What moved the index</h2><span class="big ${c.net_points >= 0 ? 'pos' : 'neg'} num">${c.net_points >= 0 ? '+' : ''}${Math.round(c.net_points)} pts</span></div>
+    <p class="small muted">Each stock's weight in Nifty × its move = the points it added or took off. ${c.advances} up, ${c.declines} down.</p>
+    <div class="viz-grid">
+      <div class="kpi good"><small>Pushed the index up · +${Math.round(c.points_up)} pts</small><ul class="contrib">${up.map(bar).join('')}</ul></div>
+      <div class="kpi bad"><small>Dragged it down · ${Math.round(c.points_down)} pts</small><ul class="contrib">${down.map(bar).join('')}</ul></div>
+    </div></div>`;
+}
+
 /** Compact card for the front page. */
 export function briefTeaser(b) {
   const n = b.nifty || {}, p = n.pivots || {}, se = b.sentiment || {};
@@ -120,6 +174,24 @@ export function render(ctx, date) {
       <div class="table-wrap mt"><table><thead><tr><th>Market</th><th class="r">Last</th><th class="r">1d</th><th class="r">5d</th><th class="r">20d</th><th class="r">RSI</th><th>Trend</th><th>For India</th></tr></thead><tbody>
       ${arr(b.globals).map((g) => `<tr><td>${esc(g.name)}</td><td class="r num">${fmtN(g.close, g.close >= 1000 ? 0 : 2)}</td><td class="r">${sgn(g.chg_1d)}</td><td class="r">${sgn(g.chg_5d)}</td><td class="r">${sgn(g.chg_20d)}</td><td class="r">${rsiTag(g.rsi)}</td><td>${trendTag(g.trend)}</td><td class="small">${indiaRead(g)}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
+
+  /* 6b. TradingView technicals */
+  const tv = b.technicals || {};
+  if (tv.summary) {
+    h += `<div class="block"><div class="section-head"><h2>Technicals ${tv.source ? `<span class="muted small">· ${esc(tv.source)}</span>` : ''}</h2>${tv.fetched_at ? `<span class="small muted">${new Date(tv.fetched_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</div>
+      <div class="viz-grid">
+        <div class="kpi">${ratingGauge(tv.summary.osc, tv.summary.osc_label, 'Oscillators')}</div>
+        <div class="kpi accent-card">${ratingGauge(tv.summary.all, tv.summary.label, 'Summary — everything together')}</div>
+        <div class="kpi">${ratingGauge(tv.summary.ma, tv.summary.ma_label, 'Moving averages')}</div>
+      </div>
+      <div class="viz-grid mt">${indTable(arr(tv.oscillators), 'Oscillators')}${indTable(arr(tv.moving_averages), 'Moving averages')}</div>
+      ${tv.pivots ? `<h3 class="mt">Pivots — monthly</h3>${pivotTable(tv.pivots, tv.close ?? n.close)}` : ''}
+      ${tv.pivots_daily && tv.pivots_daily.Classic ? `<h3 class="mt">Pivots — daily (the levels for tomorrow's session)</h3>${pivotTable(tv.pivots_daily, tv.close ?? n.close)}` : ''}
+      <p class="small muted mt">Green = the level is within ~0.35% of spot. Ratings are TradingView's own: each indicator votes, the gauge is the tally.</p></div>`;
+  }
+
+  /* 6c. index contribution */
+  h += contributionBlock(b.contribution, b.stocks);
 
   /* 7. sectors + heat map */
   if (arr(b.stocks).length) {

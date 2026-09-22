@@ -79,6 +79,9 @@ try {
   check((await page.$$('.chart-legend')).length === 1 && (await page.$$('.gauge svg')).length === 1 && (await page.$$('.ladder svg')).length === 1 && (await page.$$('.heat .cell')).length === 20, 'market: price chart, RSI gauge, ladder, heat tiles');
   check((await page.$eval('.ladder', (el) => el.textContent)).includes('now'), 'market: ladder marks the current price');
   check(/Terms explained/.test(t) && /For India/.test(t), 'market: glossary and India read');
+  check(/Technicals/.test(t) && (await page.$$('.tv-gauge svg')).length === 3 && (await page.$$('table.ind')).length === 2, 'market: TradingView technicals — 3 rating gauges + oscillator/MA tables');
+  check((await page.$$('table.pivots')).length === 2 && /Camarilla/.test(t) && /Fibonacci/.test(t), 'market: pivots in every method, monthly + daily');
+  check(/What moved the index/.test(t) && (await page.$$('.contrib li')).length >= 10, 'market: index contribution ranking by weight × move');
   await page.click('th.sort[data-k="rsi"]');
   await page.waitForFunction(() => location.hash.includes('s=rsi'));
   await page.waitForFunction(() => document.querySelector('th.sort[data-k="rsi"]')?.getAttribute('aria-sort') === 'descending');

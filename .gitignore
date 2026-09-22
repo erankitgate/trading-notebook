@@ -8,3 +8,4 @@ tests/e2e/.artifacts/
 .brief.json
 .secrets/
 *.token
+.tv.json

@@ -523,3 +523,36 @@ details summary { cursor: pointer; }
 .tk i { font-style: normal; font-weight: 800; }
 .tk.pos { color: var(--up); } .tk.neg { color: var(--down); }
 @media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }
+/* ---------- TradingView-style technicals ---------- */
+.rchip { display: inline-block; font-size: .74rem; font-weight: 800; border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+.rchip.sbuy { background: var(--up); color: #fff; }
+.rchip.buy { background: var(--up-soft); color: var(--up); }
+.rchip.neut { background: var(--line-soft); color: var(--muted); }
+.rchip.sell { background: var(--down-soft); color: var(--down); }
+.rchip.ssell { background: var(--down); color: #fff; }
+.tv-gauge { text-align: center; }
+.tv-gauge svg { width: 100%; max-width: 230px; height: auto; }
+.tv-gauge .gz.sbuy { stroke: var(--up); } .tv-gauge .gz.buy { stroke: color-mix(in srgb, var(--up) 55%, var(--paper)); }
+.tv-gauge .gz.neut { stroke: var(--line); }
+.tv-gauge .gz.sell { stroke: color-mix(in srgb, var(--down) 55%, var(--paper)); } .tv-gauge .gz.ssell { stroke: var(--down); }
+.tv-gauge .gv { font-size: 17px; font-weight: 800; font-family: inherit; fill: var(--ink); }
+.tv-gauge .gv.sbuy, .tv-gauge .gv.buy { fill: var(--up); } .tv-gauge .gv.sell, .tv-gauge .gv.ssell { fill: var(--down); }
+.kpi.accent-card { border-left-color: var(--accent); background: var(--accent-soft); }
+table.ind { font-size: .84rem; } table.ind td, table.ind th { padding: 5px 8px; }
+table.pivots { font-size: .88rem; width: 100%; }
+table.pivots td, table.pivots th { padding: 6px 10px; }
+table.pivots tr.res td:first-child b { color: var(--down); }
+table.pivots tr.sup td:first-child b { color: var(--up); }
+table.pivots tr.piv { background: var(--line-soft); font-weight: 700; }
+table.pivots td .near { background: color-mix(in srgb, var(--accent) 28%, transparent); font-weight: 800; border-radius: 5px; padding: 2px 7px; display: inline-block; }
+/* index contribution bars */
+.contrib { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 5px; }
+.contrib li { display: grid; grid-template-columns: 78px 44px 1fr 52px 56px; gap: 6px; align-items: center; font-size: .8rem; }
+.contrib .sym { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contrib .wt { font-size: .72rem; }
+.contrib .track { background: var(--line-soft); border-radius: 999px; height: 8px; overflow: hidden; }
+.contrib .track i { display: block; height: 100%; border-radius: 999px; }
+.contrib .track i.up { background: var(--up); } .contrib .track i.dn { background: var(--down); }
+.contrib .pts { font-weight: 800; text-align: right; }
+.contrib .chg { text-align: right; font-size: .74rem; }
+@media (max-width: 560px) { .contrib li { grid-template-columns: 66px 1fr 46px 50px; } .contrib .wt { display: none; } }

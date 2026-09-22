@@ -17,7 +17,8 @@ The owner opens Claude Code in this folder every day. The project slash commands
 | `/log-day` | Turns the owner's plain-English description of the day into a `diary_entries` row (trades, P&L, mistakes, lessons, plan) |
 | `/learn <topic>` | Writes a full guide as an Artifact, then saves a `learning_notes` row linking to it |
 | `/review-week` | Pulls the week's numbers from the DB, drafts the weekly review, saves it to `reviews` |
-| `/brief` | Numbers from `scripts/market_brief.py` + Upstox option chain, live news research (Reuters/Moneycontrol/CNBC), then a FULL written report (`market_briefs.report`, markdown) + plan + `trade_plans` rows for the session |
+| `/brief` | Numbers from `scripts/market_brief.py` + `scripts/tradingview.py` + Upstox option chain, live news research (Reuters/Moneycontrol/CNBC), then a FULL written report (`market_briefs.report`, markdown) + plan + `trade_plans` rows for the session |
+| `/tv` | Just the TradingView refresh: `python3 scripts/tradingview.py .tv.json` then `NOTEBOOK_PASSWORD=… python3 scripts/publish_tv.py --date <session>` — oscillators, MAs, ratings, pivots in 5 methods, and every stock's index weight + points contribution |
 | `/balance <₹>` | Records the day's account balance in `capital_log` (hero card + balance chart) |
 | `/deploy` | Runs checks + tests, commits, pushes, watches the Pages deploy until green |
 
@@ -82,6 +83,8 @@ tests/e2e/run.js      headless Chrome (puppeteer-core) walk of every route in de
 - `reviews` — weekly: `week_start (Monday, unique per user), grade A–F, what_worked [], what_didnt [], focus [], notes`.
 - `capital_log` — `date (unique per user), amount, note` — reported account balances; `stats.balanceSeries` fills gaps with diary P&L.
 - `market_briefs` — `date (session, unique per user), as_of, summary, plan [], nifty {…, pivots}, indices [], globals [], stocks [], breadth {}` — built by `/brief`.
+- `market_briefs.technicals` — TradingView's own numbers: `{close, change_pct, summary{all,ma,osc,label,…}, oscillators[], moving_averages[], pivots{Classic,Fibonacci,Camarilla,Woodie,DM}, pivots_daily{}}`.
+- `market_briefs.contribution` — `{points_up, points_down, net_points, advances, declines, top_contributors[], top_draggers[]}`; each `stocks[]` row also carries `weight_pct` (free-float) and `points` (weight × move).
 - `market_briefs.report` — the full written analysis (markdown; rendered by `md()` in dom.js); `oi` — option-chain summary `{weekly{expiry,pcr,max_call,max_put,call_walls,put_walls,straddle,expected_move}, monthly{…}}`.
 - `trade_plans` — per-session plans shown live: `date, instrument, instrument_key (Upstox), side, entry, stop, target, qty, condition, status (waiting|live|done|cancelled), fill, exit, note, sort`.
 - `diary_entries.rules_check` — `[{id, text, followed}]` snapshot of every rule for the day (`rules_broken` is the derived subset).
